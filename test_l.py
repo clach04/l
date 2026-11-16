@@ -78,9 +78,12 @@ class PureTests(unittest.TestCase):
 
     def test_summary(self):
         self.assertEqual(l.summary_line(3, 2, 1468, 2048, False),
-                         '3 files, 2 dirs, 1468 bytes, 2048 bytes free')
+                         '3 files | 2 dirs | 1,468 bytes | 2,048 bytes free')
+        self.assertEqual(l.summary_line(1234, 2, 745045913600, 53630, False),
+                         '1,234 files | 2 dirs | 745,045,913,600 bytes | '
+                         '53,630 bytes free')
         self.assertEqual(l.summary_line(1, 0, 2048, None, True),
-                         '1 files, 0 dirs, 2.0K')
+                         '1 files | 0 dirs | 2.0K')
 
 
 class ColorTests(unittest.TestCase):
@@ -274,7 +277,7 @@ class CliTests(unittest.TestCase):
     def test_summary_flag(self):
         code, out, err = run(['-s', '*.py'], cwd=self.d)
         lines = out.splitlines()
-        self.assertTrue(lines[-1].startswith('1 files, 0 dirs, 1 bytes'), out)
+        self.assertTrue(lines[-1].startswith('1 files | 0 dirs | 1 bytes'), out)
         self.assertEqual(lines[-2], '')  # blank line before the footer
 
     def test_no_summary_when_piped(self):

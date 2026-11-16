@@ -161,11 +161,12 @@ def size_width(entries, args):
 
 def summary_line(files, dirs, nbytes, free, human):
     def b(n):
-        return format_size(n, human) if human else '%d bytes' % n
-    parts = ['%d files' % files, '%d dirs' % dirs, b(nbytes)]
+        return format_size(n, human) if human else format(n, ',d') + ' bytes'
+    parts = [format(files, ',d') + ' files', format(dirs, ',d') + ' dirs',
+             b(nbytes)]
     if free is not None:
         parts.append(b(free) + ' free')
-    return ', '.join(parts)
+    return ' | '.join(parts)
 
 
 # ---------------------------------------------------------------- color

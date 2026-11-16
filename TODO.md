@@ -25,6 +25,12 @@
 
 ## Deferred
 
+  * Revisit footer format. Now `7 files | 4 dirs | 53,875 bytes | N bytes
+    free`. Idea: `key:value` (`files:7 dirs:4 size:53,875 free:N`). The
+    "bytes" label is misleading: it is the cumulative size of the listed
+    files, so something like `size`/`used` fits better. Or `dir`-style
+    aligned two lines.
+
   * C version.
   * `--si` (base 1000 sizes).
   * atime / ctime.
