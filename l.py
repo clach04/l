@@ -25,6 +25,10 @@ DIR_MARK = '<DIR>'
 DOT = u'.' if (not PY3 and IS_WIN) else '.'  # py2 Windows needs unicode paths
 IO_REPARSE_TAG_MOUNT_POINT = 0xA0000003  # Windows junction
 ENV_OPTS = 'L_OPTS'
+FILE_ATTRIBUTE_HIDDEN = 0x2
+# version control directories: listed under -R, never entered
+VCS_DIRS = frozenset(os.path.normcase(n)
+                     for n in ('.git', '.hg', '.svn', '.bzr', 'CVS'))
 
 if PY3:
     _LONE_SURROGATE = re.compile(u'[\ud800-\udfff]')
@@ -56,6 +60,16 @@ def format_time(mtime):
         return time.strftime('%Y-%m-%d %H:%M', time.localtime(mtime))
     except (ValueError, OverflowError, OSError):
         return UNKNOWN_TIME
+
+
+def is_hidden(name, st):
+    """Dotfile on any platform, or Windows hidden attribute (py3 lstat)."""
+    return (name.startswith('.')
+            or bool(getattr(st, 'st_file_attributes', 0) & FILE_ATTRIBUTE_HIDDEN))
+
+
+def is_vcs_dir(name):
+    return os.path.normcase(name) in VCS_DIRS
 
 
 def has_magic(s):
@@ -311,12 +325,16 @@ def collect(spec, args, ignore_case, status):
             except OSError as e:
                 status.error('%s: %s' % (full, e.strerror or e))
                 continue
+            if args.no_hidden and is_hidden(n, st):
+                continue  # neither listed nor descended
             rel = os.path.join(rel_dir, n) if rel_dir else n
             e = make_entry(os.path.join(spec.prefix, rel) if spec.prefix
                            else rel, full, st)
             if matcher is None or matcher(n):
                 entries.append(e)
-            if args.recursive and e.is_dir:
+            # VCS dirs met during the walk are listed but not entered; a
+            # VCS dir given as the Target is the walk root, so it is entered
+            if args.recursive and e.is_dir and not is_vcs_dir(n):
                 subdirs.append((n, rel))
         groups.append(entries)
         subdirs.sort(key=lambda s: os.path.normcase(s[0]), reverse=True)
@@ -355,6 +373,11 @@ def build_parser():
     p.add_argument('--case-sensitive', dest='ignore_case',
                    action='store_const', const=False,
                    help='case-sensitive wildcard matching')
+    p.add_argument('--no-hidden', dest='no_hidden', action='store_const',
+                   const=True, default=False,
+                   help='hide dotfiles and Windows hidden entries')
+    p.add_argument('--hidden', dest='no_hidden', action='store_const',
+                   const=False, help='show hidden entries (default)')
     p.add_argument('-s', '--summary', action='store_true',
                    help='always print summary (default: only on a tty)')
     p.add_argument('--names', action='store_true',

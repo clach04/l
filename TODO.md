@@ -15,6 +15,7 @@
 
   * Wide East Asian characters can misalign columns.
   * Python 2 on Windows has no `os.readlink`, so link targets are not shown.
+  * Python 2 on Windows: the hidden attribute is not seen, only dotfiles.
 
 ## Deferred
 

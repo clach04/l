@@ -245,12 +245,68 @@ class CliTests(unittest.TestCase):
             self.assertIn('\\xe9', out)
             self.assertIn('shown lossy', err)
 
+    def test_no_hidden(self):
+        code, out, err = run(['--no-hidden', '--names'], cwd=self.d)
+        self.assertNotIn('.hidden', out.splitlines())
+        code, out, err = run(['--no-hidden', '--hidden', '--names'],
+                             cwd=self.d)
+        self.assertIn('.hidden', out.splitlines())
+
+    def test_no_hidden_skips_hidden_dirs_under_recursion(self):
+        os.makedirs(os.path.join(self.d, '.dot', 'in'))
+        self.mk(os.path.join('.dot', 'in', 'f.txt'), 'q', 1400000000)
+        code, out, err = run(['-R', '--names'], cwd=self.d)
+        self.assertIn(os.path.join('.dot', 'in', 'f.txt'), out.splitlines())
+        code, out, err = run(['-R', '--no-hidden', '--names'], cwd=self.d)
+        self.assertFalse([n for n in out.splitlines() if 'dot' in n], out)
+
+    def test_no_hidden_windows_attribute(self):
+        if not (IS_WIN and PY3):
+            self.skipTest('Windows py3 only')
+        import ctypes
+        p = os.path.join(self.d, 'attr.txt')
+        open(p, 'w').close()
+        ctypes.windll.kernel32.SetFileAttributesW(p, 2)
+        code, out, err = run(['--names', 'attr'], cwd=self.d)
+        self.assertEqual(out.splitlines(), ['attr.txt'])
+        code, out, err = run(['--no-hidden', '--names', 'attr'], cwd=self.d)
+        self.assertEqual(code, 1)
+
+    def test_vcs_dirs_listed_not_entered(self):
+        s = os.sep
+        os.makedirs(os.path.join(self.d, '.git', 'hooks'))
+        self.mk(os.path.join('.git', 'HEAD'), 'ref', 1400000000)
+        os.makedirs(os.path.join(self.d, 'sub', '.svn'))
+        self.mk(os.path.join('sub', '.svn', 'entries'), 'e', 1400000000)
+        code, out, err = run(['-R', '--names'], cwd=self.d)
+        names = out.splitlines()
+        self.assertIn('.git' + s, names)
+        self.assertIn('sub' + s + '.svn' + s, names)
+        self.assertFalse([n for n in names if 'HEAD' in n or 'entries' in n
+                          or 'hooks' in n], names)
+        self.assertIn('sub' + s + 'deep.py', names)
+
+    def test_vcs_dir_as_target_is_entered(self):
+        s = os.sep
+        os.makedirs(os.path.join(self.d, '.git', 'hooks'))
+        self.mk(os.path.join('.git', 'HEAD'), 'ref', 1400000000)
+        os.makedirs(os.path.join(self.d, '.git', 'x', '.git'))
+        for target in ('.git/', '.git'):
+            code, out, err = run(['-R', '--names', target], cwd=self.d)
+            names = out.splitlines()
+            self.assertIn('HEAD', names)
+            self.assertIn('hooks' + s, names)
+            self.assertIn('x' + s + '.git' + s, names)  # nested not entered
+        code, out, err = run(['--names', '.git/hooks'], cwd=self.d)
+        self.assertEqual(code, 0, err)
+
     def test_bad_flag(self):
         code, out, err = run(['--nope'], cwd=self.d)
         self.assertEqual(code, 2)
 
 
 PY3 = sys.version_info >= (3,)
+IS_WIN = os.name == 'nt'
 
 if __name__ == '__main__':
     unittest.main()

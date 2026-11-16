@@ -51,6 +51,8 @@ l.py --names -R | xargs ...
 | `-h`                        | Human sizes like `ls -lh` (`1.5K`)                       |
 | `-i`, `--ignore-case`       | Case-insensitive wildcards                               |
 | `--case-sensitive`          | Case-sensitive wildcards (default is platform native)    |
+| `--no-hidden`               | Hide dotfiles and Windows hidden entries                 |
+| `--hidden`                  | Show hidden entries (default); undoes `--no-hidden`      |
 | `-s`, `--summary`           | Always print summary (default: only on a tty)            |
 | `--names`                   | Names only, one per line                                 |
 | `--posix`                   | Print `/` in names on Windows                            |
@@ -61,7 +63,12 @@ l.py --names -R | xargs ...
 
 ## Behavior
 
-  * Hidden entries are shown. `.` and `..` are not.
+  * Hidden entries are shown. `.` and `..` are not. `--no-hidden` hides
+    dotfiles and, on Windows (Python 3), entries with the hidden attribute.
+    Under `-R` hidden directories are not entered either.
+  * Under `-R`, version control directories (`.git`, `.hg`, `.svn`, `.bzr`,
+    `CVS`) are listed but not entered. Name one as the Target to look
+    inside, e.g. `l.py -R .git`.
   * Directory names end with a path separator (`sub/`).
   * Links show as `name -> target` and are never followed.
   * Times are local modification time. Bad times show `????-??-?? ??:??`.
