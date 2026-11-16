@@ -38,11 +38,12 @@ DEFAULT_SKIP = ('.git', '.hg', '.svn', '.bzr', 'CVS',
 
 # ---------------------------------------------------------------- pure funcs
 
-def format_size(n, human=False):
-    """Byte count to str. human: like ls -lh (1024, K M G T P, round up)."""
+def format_size(n, human=False, commas=False):
+    """Byte count to str. human: like ls -lh (1024, K M G T P, round up).
+    commas: group digits (plain sizes only; human sizes are short)."""
     assert n >= 0, 'negative size %r' % (n,)
     if not human or n < 1024:
-        return str(n)
+        return format(n, ',d') if commas else str(n)
     v = float(n)
     for unit in 'KMGTP':
         v /= 1024.0
@@ -139,7 +140,8 @@ def sort_entries(entries, key, reverse, dirs_first):
 
 def format_entry(e, width, args):
     """One output line (native str type; see Output)."""
-    size = DIR_MARK if e.is_dir else format_size(e.size, args.human)
+    size = DIR_MARK if e.is_dir else format_size(e.size, args.human,
+                                                 args.commas)
     name = e.name
     if e.is_dir:
         name += os.sep
@@ -155,7 +157,8 @@ def format_entry(e, width, args):
 
 
 def size_width(entries, args):
-    return max([len(DIR_MARK if e.is_dir else format_size(e.size, args.human))
+    return max([len(DIR_MARK if e.is_dir else
+                    format_size(e.size, args.human, args.commas))
                 for e in entries] or [0])
 
 
@@ -497,6 +500,8 @@ def build_parser():
                    help='directories first (ignored by flat -R)')
     p.add_argument('-h', '--human-readable', dest='human',
                    action='store_true', help='human readable sizes')
+    p.add_argument('--commas', action='store_true',
+                   help='comma-group digits in the size column')
     p.add_argument('-i', '--ignore-case', dest='ignore_case',
                    action='store_const', const=True, default=None,
                    help='case-insensitive wildcard matching')

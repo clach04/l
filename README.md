@@ -49,6 +49,7 @@ l.py --names -R | xargs ...
 | `--sort time\|name\|size`   | Sort key, default `time`. Name is the tie-break          |
 | `--group-directories-first` | Directories first (ignored by flat `-R`)                 |
 | `-h`                        | Human sizes like `ls -lh` (`1.5K`)                       |
+| `--commas`                  | Comma-group digits in the size column (`-h` wins)        |
 | `-i`, `--ignore-case`       | Case-insensitive wildcards                               |
 | `--case-sensitive`          | Case-sensitive wildcards (default is platform native)    |
 | `--no-hidden`               | Hide dotfiles and Windows hidden entries                 |

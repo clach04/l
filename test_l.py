@@ -34,6 +34,11 @@ class PureTests(unittest.TestCase):
         self.assertEqual(l.format_size(0, True), '0')
         self.assertEqual(l.format_size(999, True), '999')
 
+    def test_size_commas(self):
+        self.assertEqual(l.format_size(1468, False, True), '1,468')
+        self.assertEqual(l.format_size(999, False, True), '999')
+        self.assertEqual(l.format_size(1234567, True, True), '1.2M')
+
     def test_size_human(self):
         f = lambda n: l.format_size(n, True)  # noqa: E731
         self.assertEqual(f(1024), '1.0K')
@@ -187,6 +192,12 @@ class CliTests(unittest.TestCase):
 
     def test_human(self):
         code, out, err = run(['-h', 'old.txt'], cwd=self.d)
+        self.assertTrue(out.strip().endswith(' 1.5K old.txt'), out)
+
+    def test_commas(self):
+        code, out, err = run(['--commas', 'old.txt'], cwd=self.d)
+        self.assertTrue(out.strip().endswith(' 1,500 old.txt'), out)
+        code, out, err = run(['--commas', '-h', 'old.txt'], cwd=self.d)
         self.assertTrue(out.strip().endswith(' 1.5K old.txt'), out)
 
     def test_dir_mark_and_dirs_first(self):
