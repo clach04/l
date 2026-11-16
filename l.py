@@ -11,16 +11,10 @@ import fnmatch
 import math
 import os
 import shlex
-import shutil
 import stat
 import struct
 import sys
 import time
-
-try:  # optional, Windows ANSI support
-    import colorama
-except ImportError:
-    colorama = None
 
 PY3 = sys.version_info >= (3,)
 IS_WIN = os.name == 'nt'
@@ -306,10 +300,17 @@ def color_enabled(mode, env, isatty, have_colorama, is_win):
                 or 'TERM_PROGRAM' in env or 'WT_SESSION' in env)
 
 
-def init_colorama():
-    """Enable ANSI on old Windows consoles when colorama is available."""
-    if colorama is None:
-        return
+def load_colorama():
+    """The optional colorama module, or None. Imported lazily: ~10 ms."""
+    try:
+        import colorama
+    except ImportError:
+        return None
+    return colorama
+
+
+def init_colorama(colorama):
+    """Enable ANSI on old Windows consoles."""
     try:
         colorama.just_fix_windows_console()
     except AttributeError:  # older colorama
@@ -358,11 +359,12 @@ def is_mintty_pty(stream):
 def free_bytes(path):
     """Free bytes on path's volume, or None when unavailable."""
     try:
-        if hasattr(shutil, 'disk_usage'):
-            return shutil.disk_usage(path).free
         if hasattr(os, 'statvfs'):
             st = os.statvfs(path)
             return st.f_bavail * st.f_frsize
+        if PY3:
+            import shutil  # lazy: ~8 ms, only the footer needs it
+            return shutil.disk_usage(path).free
         if IS_WIN:
             import ctypes
             free = ctypes.c_ulonglong(0)
@@ -642,12 +644,15 @@ def main(argv=None):
     real_tty = sys.stdout.isatty()
     isatty = real_tty or is_mintty_pty(sys.stdout)
     args.palette = None
+    # colorama only matters for a Windows tty; skip its import cost otherwise
+    colorama = (load_colorama()
+                if IS_WIN and isatty and args.color != 'never' else None)
     if color_enabled(args.color, os.environ, isatty, colorama is not None,
                      IS_WIN):
         args.palette = Palette(os.environ.get('LS_COLORS'),
                                os.environ.get('PATHEXT'))
-        if real_tty:  # piped (and mintty) output stays raw ANSI
-            init_colorama()
+        if real_tty and colorama is not None:  # piped/mintty stays raw ANSI
+            init_colorama(colorama)
     status = Status()
     out = Output(args.utf8, status)
     targets = args.targets or [DOT]
