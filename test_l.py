@@ -209,8 +209,9 @@ class CliTests(unittest.TestCase):
 
     def test_summary_flag(self):
         code, out, err = run(['-s', '*.py'], cwd=self.d)
-        last = out.splitlines()[-1]
-        self.assertTrue(last.startswith('1 files, 0 dirs, 1 bytes'), last)
+        lines = out.splitlines()
+        self.assertTrue(lines[-1].startswith('1 files, 0 dirs, 1 bytes'), out)
+        self.assertEqual(lines[-2], '')  # blank line before the footer
 
     def test_no_summary_when_piped(self):
         code, out, err = run(['*.py'], cwd=self.d)

@@ -420,6 +420,7 @@ def main(argv=None):
         sort_entries(entries, args.sort, args.reverse, dirs_first)
     counts = render(entries, args, out)
     if show_summary:
+        out.write('')  # blank line separates the footer from the entries
         out.write(summary_line(counts[0], counts[1], counts[2], free,
                                args.human))
 
