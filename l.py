@@ -138,6 +138,56 @@ def sort_entries(entries, key, reverse, dirs_first):
     return entries
 
 
+QUOTE_SAFE = frozenset('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
+                       '0123456789_@%+=:,./-')
+NAMED_ESC = {'\n': '\\n', '\t': '\\t', '\r': '\\r'}
+
+
+def _is_odd(o, is_text):
+    """Control char, C1 char or lone surrogate (needs an escape)."""
+    return o < 32 or o == 127 or (
+        is_text and (0x80 <= o < 0xA0 or 0xD800 <= o <= 0xDFFF))
+
+
+def _quote_escape(ch, style, is_text):
+    """Escape one char for quote_name; ordinary chars come back unchanged."""
+    o = ord(ch)
+    if ch == '\\':
+        # Windows: backslash is the path separator, cmd/PowerShell do not
+        # treat it as an escape, so it stays literal in c style
+        return ch if (style == 'c' and IS_WIN) else '\\\\'
+    if ch == ("'" if style == 'sh' else '"'):
+        return '\\' + ch
+    if ch in NAMED_ESC:
+        return NAMED_ESC[ch]
+    if not _is_odd(o, is_text):
+        return ch
+    byte = o < 32 or o == 127
+    if is_text and not IS_WIN and 0xDC80 <= o <= 0xDCFF:
+        o -= 0xDC00  # surrogateescape: the original byte
+        byte = True
+    if byte:
+        return '\\x%02x' % o if style == 'sh' else '\\%03o' % o
+    return '\\u%04x' % o
+
+
+def quote_name(name, style):
+    """Quote name so it can be pasted into a shell. style: sh (POSIX shell:
+    single quotes, $'..' when control or undecodable chars are present) or
+    c (double quotes, C escapes). Names needing no quoting stay bare.
+    Py2 POSIX names are bytes: bytes >= 0x80 pass through unchanged."""
+    assert style in ('sh', 'c'), 'bad quote style %r' % (style,)
+    is_text = isinstance(name, text_type)
+    safe = (QUOTE_SAFE | frozenset('\\')) if IS_WIN else QUOTE_SAFE
+    odd = any(_is_odd(ord(c), is_text) for c in name)
+    if not odd and all(c in safe or ord(c) >= 0x80 for c in name):
+        return name
+    if style == 'sh' and not odd:
+        return "'" + name.replace("'", "'\\''") + "'"
+    esc = ''.join(_quote_escape(c, style, is_text) for c in name)
+    return '"' + esc + '"' if style == 'c' else "$'" + esc + "'"
+
+
 def format_entry(e, width, args):
     """One output line (native str type; see Output)."""
     size = DIR_MARK if e.is_dir else format_size(e.size, args.human,
@@ -147,6 +197,8 @@ def format_entry(e, width, args):
         name += os.sep
     if args.posix and IS_WIN:
         name = name.replace('\\', '/')
+    if args.quote_style:
+        name = quote_name(name, args.quote_style)
     if args.palette is not None:
         name = args.palette.paint(e, name)
     if args.names:
@@ -530,6 +582,13 @@ def build_parser():
                    help='names only, one per line')
     p.add_argument('--posix', action='store_true',
                    help='use / in printed names on Windows')
+    p.add_argument('-q', '--quote', dest='quote_style', action='store_const',
+                   const='auto', help='quote names for copy/paste (sh style, '
+                                      'c style on Windows)')
+    p.add_argument('--quote-style', dest='quote_style', choices=('sh', 'c'),
+                   metavar='STYLE', help='quote names: sh (single quotes, '
+                                         "$'..') or c (double quotes, C "
+                                         'escapes); implies --quote')
     p.add_argument('--utf8', action='store_true',
                    help='force UTF-8 output')
     return p
@@ -556,6 +615,8 @@ def main(argv=None):
     for extra in args.skip_also:
         args.skip_patterns.extend(extra)
     args.skip_matcher = make_skip_matcher(args.skip_patterns)
+    if args.quote_style == 'auto':
+        args.quote_style = 'c' if IS_WIN else 'sh'
     real_tty = sys.stdout.isatty()
     isatty = real_tty or is_mintty_pty(sys.stdout)
     args.palette = None

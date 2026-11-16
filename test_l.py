@@ -39,6 +39,36 @@ class PureTests(unittest.TestCase):
         self.assertEqual(l.format_size(999, False, True), '999')
         self.assertEqual(l.format_size(1234567, True, True), '1.2M')
 
+    def test_quote_name(self):
+        q = l.quote_name
+        self.assertEqual(q('plain-1.txt', 'sh'), 'plain-1.txt')
+        self.assertEqual(q('plain-1.txt', 'c'), 'plain-1.txt')
+        self.assertEqual(q('a b.txt', 'sh'), "'a b.txt'")
+        self.assertEqual(q('a b.txt', 'c'), '"a b.txt"')
+        self.assertEqual(q("it's", 'sh'), "'it'\\''s'")
+        self.assertEqual(q('a"b', 'c'), '"a\\"b"')
+        self.assertEqual(q('a\nb', 'sh'), "$'a\\nb'")
+        self.assertEqual(q('a\nb', 'c'), '"a\\nb"')
+        self.assertEqual(q('a\x01b', 'sh'), "$'a\\x01b'")
+        self.assertEqual(q('a\x01b', 'c'), '"a\\001b"')
+        self.assertEqual(q('a$b', 'sh'), "'a$b'")
+        saved = l.IS_WIN
+        try:
+            l.IS_WIN = False  # POSIX rules, whatever the host
+            self.assertEqual(q('a\\b', 'sh'), "'a\\b'")
+            self.assertEqual(q('a\\b', 'c'), '"a\\\\b"')
+            self.assertEqual(q("a\\'\x01", 'sh'), "$'a\\\\\\'\\x01'")
+            if PY3:  # surrogateescape of byte 0xe9
+                self.assertEqual(q('a' + chr(0xDCE9), 'sh'), "$'a\\xe9'")
+                self.assertEqual(q('a' + chr(0xDCE9), 'c'), '"a\\351"')
+            l.IS_WIN = True  # backslash is the separator: left alone in c
+            self.assertEqual(q('sub\\a b', 'c'), '"sub\\a b"')
+            self.assertEqual(q('sub\\a', 'c'), 'sub\\a')
+        finally:
+            l.IS_WIN = saved
+        self.assertEqual(q(u'caf' + chr(0xe9) if PY3 else u'caf\xe9', 'sh'),
+                         u'caf' + (chr(0xe9) if PY3 else u'\xe9'))
+
     def test_size_human(self):
         f = lambda n: l.format_size(n, True)  # noqa: E731
         self.assertEqual(f(1024), '1.0K')
@@ -199,6 +229,23 @@ class CliTests(unittest.TestCase):
         self.assertTrue(out.strip().endswith(' 1,500 old.txt'), out)
         code, out, err = run(['--commas', '-h', 'old.txt'], cwd=self.d)
         self.assertTrue(out.strip().endswith(' 1.5K old.txt'), out)
+
+    def test_quote(self):
+        self.mk('has space.txt', 'z', 1700000000)
+        code, out, err = run(['--quote-style=sh', '--names', 'space'],
+                             cwd=self.d)
+        self.assertEqual(out.strip(), "'has space.txt'", out)
+        code, out, err = run(['--quote-style=c', '--names', 'space'],
+                             cwd=self.d)
+        self.assertEqual(out.strip(), '"has space.txt"', out)
+        code, out, err = run(['--quote', '--names', 'space'], cwd=self.d)
+        self.assertEqual(out.strip(),
+                         '"has space.txt"' if IS_WIN else "'has space.txt'")
+        code, out, err = run(['-q', '--names', 'space'], cwd=self.d)
+        self.assertEqual(out.strip(),
+                         '"has space.txt"' if IS_WIN else "'has space.txt'")
+        code, out, err = run(['--quote', '--names', 'old'], cwd=self.d)
+        self.assertEqual(out.strip(), 'old.txt')  # no quoting needed
 
     def test_dir_mark_and_dirs_first(self):
         code, out, err = run(['--group-directories-first'], cwd=self.d)

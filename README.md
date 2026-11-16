@@ -59,6 +59,8 @@ l.py --names -R | xargs ...
 | `--color=WHEN`              | `auto` (tty only), `always`, `never`. Uses `LS_COLORS`   |
 | `-s`, `--summary`           | Always print summary (default: only on a tty)            |
 | `--names`                   | Names only, one per line                                 |
+| `-q`, `--quote`             | Quote names for copy/paste (`sh`; `c` on Windows)        |
+| `--quote-style=sh\|c`       | `sh`: `'a b'`. `c`: `"a b"`. Implies `--quote`           |
 | `--posix`                   | Print `/` in names on Windows                            |
 | `--utf8`                    | Force UTF-8 output                                       |
 | `--help`                    | Help (`-h` is human sizes)                               |
@@ -84,6 +86,10 @@ l.py --names -R | xargs ...
     executables green). `auto` needs a tty and honors `NO_COLOR`.
     `--color=always` ignores `NO_COLOR`. On Windows, `colorama` is used if
     installed.
+  * `--quote` quotes the name only (not `-> target`), and only when needed.
+    `sh`: single quotes, `$'..'` escapes for control or undecodable bytes.
+    `c`: double quotes with C escapes. On Windows `\` is the path separator
+    and stays literal in `c` style.
   * Times are local modification time. Bad times show `????-??-?? ??:??`.
   * Unprintable characters print as `\xe9` style escapes. A closing note on
     stderr counts such names. Use `--utf8` for copy/paste-safe output.
