@@ -77,6 +77,13 @@ l.py --names -R | xargs ...
   * Errors go to stderr, with a closing `N errors` line. Exit code: 1 for no
     wildcard match, 2 for other errors.
 
+## Aliases
+
+Windows CMD.exe
+
+    doskey l=py -3 l.py $*
+    doskey l=py -3 C:\full\path\l.py $*
+
 ## Tests
 
 ```bash
