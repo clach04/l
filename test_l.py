@@ -151,6 +151,21 @@ class ColorTests(unittest.TestCase):
         self.assertEqual(p.style(self.E('a.sh', mode=0o755)), '01;32')
         self.assertEqual(p.style(self.E('a.sh')), '0;33')
 
+    def test_palette_windows_pathext(self):
+        self.assertEqual(l.win_executable_exts(None), l.WIN_EXECUTABLE)
+        self.assertEqual(l.win_executable_exts(' ; '), l.WIN_EXECUTABLE)
+        self.assertEqual(l.win_executable_exts('.EXE;.PY; '), ('.exe', '.py'))
+        saved = l.IS_WIN
+        try:
+            l.IS_WIN = True
+            p = l.Palette(None, '.EXE;.PY')
+            self.assertEqual(p.style(self.E('a.PY')), '01;32')
+            self.assertEqual(p.style(self.E('a.bat')), '')  # not in PATHEXT
+            self.assertEqual(l.Palette(None).style(self.E('a.bat')), '01;32')
+            self.assertEqual(l.Palette(None).style(self.E('a.py')), '')
+        finally:
+            l.IS_WIN = saved
+
     def test_mintty_pipe_name(self):
         bs = chr(92)
         f = l.is_mintty_pipe_name

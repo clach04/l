@@ -239,11 +239,21 @@ SGR_CHARS = '0123456789;'  # LS_COLORS values: SGR parameters only
 WIN_EXECUTABLE = ('.exe', '.bat', '.cmd', '.com')
 
 
+def win_executable_exts(pathext):
+    """Lowercase extensions from a PATHEXT value; the default list when the
+    value is unset or empty."""
+    exts = tuple(x.strip().lower() for x in (pathext or '').split(';')
+                 if x.strip())
+    return exts or WIN_EXECUTABLE
+
+
 class Palette(object):
     """Name colors from LS_COLORS (GNU dircolors format) over defaults.
-    Supported: di, ln, ex, fi and *.glob keys. Last matching glob wins."""
+    Supported: di, ln, ex, fi and *.glob keys. Last matching glob wins.
+    On Windows "executable" means an extension in pathext (PATHEXT)."""
 
-    def __init__(self, ls_colors=None):
+    def __init__(self, ls_colors=None, pathext=None):
+        self.exec_exts = win_executable_exts(pathext)
         self.types = dict(DEFAULT_COLORS)
         self.globs = []
         for item in (ls_colors or '').split(':'):
@@ -263,7 +273,7 @@ class Palette(object):
             return self.types.get('di', '')
         base = os.path.basename(e.name)
         if IS_WIN:
-            executable = base.lower().endswith(WIN_EXECUTABLE)
+            executable = base.lower().endswith(self.exec_exts)
         else:
             executable = bool(e.mode & 0o111)
         if executable:
@@ -634,7 +644,8 @@ def main(argv=None):
     args.palette = None
     if color_enabled(args.color, os.environ, isatty, colorama is not None,
                      IS_WIN):
-        args.palette = Palette(os.environ.get('LS_COLORS'))
+        args.palette = Palette(os.environ.get('LS_COLORS'),
+                               os.environ.get('PATHEXT'))
         if real_tty:  # piped (and mintty) output stays raw ANSI
             init_colorama()
     status = Status()

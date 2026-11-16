@@ -85,7 +85,8 @@ l.py --names -R | xargs ...
     (`sn`, yellow), `<DIR>` marker (`dm`, blue), then the name. `LS_COLORS`
     is read for `di`, `ln`, `ex`, `fi`, `*.ext`, plus `da`, `sn` (eza keys)
     and `dm` (ours) over a built-in default (dirs bold blue, links cyan,
-    executables green). An empty value (`sn=`) turns a zone off. Padding is
+    executables green; on Windows "executable" means an extension in
+    `PATHEXT`). An empty value (`sn=`) turns a zone off. Padding is
     never colored. `auto` needs a tty and honors `NO_COLOR`.
     `--color=always` ignores `NO_COLOR`. On Windows, `colorama` is used if
     installed.
@@ -111,6 +112,7 @@ Windows CMD.exe
 
     doskey l=py -3 l.py $*
     doskey l=py -3 C:\full\path\l.py $*
+    set PATHEXT=%PATHEXT%;.py
 
 ## Tests
 
