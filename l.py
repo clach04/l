@@ -70,9 +70,18 @@ def is_hidden(name, st):
             or bool(getattr(st, 'st_file_attributes', 0) & FILE_ATTRIBUTE_HIDDEN))
 
 
-def is_skipped(name, patterns):
-    """fnmatch with the platform case rule."""
-    return any(fnmatch.fnmatch(name, p) for p in patterns)
+def make_skip_matcher(patterns):
+    """Return skipped(name). Plain names use a set lookup; only wildcard
+    patterns go through fnmatch (which compiles a regex per pattern).
+    Platform case rule in both."""
+    names = frozenset(os.path.normcase(p) for p in patterns
+                      if not has_magic(p))
+    globs = [p for p in patterns if has_magic(p)]
+
+    def skipped(name):
+        return (os.path.normcase(name) in names
+                or any(fnmatch.fnmatch(name, g) for g in globs))
+    return skipped
 
 
 def csv(text):
@@ -454,7 +463,7 @@ def collect(spec, args, ignore_case, status):
             # skip-list dirs met during the walk are listed but not entered;
             # one given as the Target is the walk root, so it is entered
             if (args.recursive and e.is_dir
-                    and not is_skipped(n, args.skip_patterns)):
+                    and not args.skip_matcher(n)):
                 subdirs.append((n, rel))
         groups.append(entries)
         subdirs.sort(key=lambda s: os.path.normcase(s[0]), reverse=True)
@@ -540,6 +549,7 @@ def main(argv=None):
     args.skip_patterns = list(DEFAULT_SKIP if args.skip is None else args.skip)
     for extra in args.skip_also:
         args.skip_patterns.extend(extra)
+    args.skip_matcher = make_skip_matcher(args.skip_patterns)
     real_tty = sys.stdout.isatty()
     isatty = real_tty or is_mintty_pty(sys.stdout)
     args.palette = None

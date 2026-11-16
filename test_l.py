@@ -124,6 +124,17 @@ class ColorTests(unittest.TestCase):
         with open(__file__, 'rb') as f:
             self.assertFalse(l.is_mintty_pty(f))  # real file
 
+    def test_skip_matcher(self):
+        m = l.make_skip_matcher(['.git', 'node_modules', '*.egg-info', 'b?d'])
+        self.assertTrue(m('.git'))
+        self.assertTrue(m('node_modules'))
+        self.assertTrue(m('pkg.egg-info'))
+        self.assertTrue(m('bad'))
+        self.assertFalse(m('git'))
+        self.assertFalse(m('node_modules2'))
+        self.assertFalse(l.make_skip_matcher([])('.git'))
+        self.assertEqual(m('.GIT'), os.name == 'nt')  # platform case rule
+
     def test_color_enabled(self):
         f = l.color_enabled
         self.assertTrue(f('always', {'NO_COLOR': '1'}, False, False, True))
