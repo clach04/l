@@ -10,7 +10,7 @@ No ADR written: decisions are easy to reverse (flags), not a hard trade-off.
 | Targets      | Trailing slash = directory (error if not). Existing dir or file is listed. Else wildcard. None = "."   |
 | Matching     | fnmatch on names, platform-native case. `-i` / `--ignore-case`. `--case-sensitive` undoes it           |
 | Recursion    | `-R` / `--recursive` flat, relative paths, sorted across tree. Directory links not descended           |
-| Grouped      | `--by-dir` grouped listing, implies `-R`. Header per dir, per-dir summary plus grand total             |
+| Grouped      | `--by-dir`: flat lines like `-R`, a directory's entries kept together, no headers. Implies `-R`        |
 | Sort         | `--sort=time\|name\|size`, default time, oldest first, name tie-break. `-r` reverses                   |
 | Dir first    | `--group-directories-first`, long-only. Ignored under flat `-R`                                        |
 | Line         | `YYYY-MM-DD HH:MM  size name`. Size right-aligned. `<DIR>` for directories                             |

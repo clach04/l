@@ -75,11 +75,10 @@ def make_matcher(pattern, ignore_case):
 
 class Entry(object):
     """One listed file, directory or link."""
-    __slots__ = ('name', 'base', 'is_dir', 'is_link', 'size', 'mtime', 'target')
+    __slots__ = ('name', 'is_dir', 'is_link', 'size', 'mtime', 'target')
 
-    def __init__(self, name, base, is_dir, is_link, size, mtime, target):
-        self.name = name  # relative path as shown in flat listings
-        self.base = base  # bare name, shown in grouped listings
+    def __init__(self, name, is_dir, is_link, size, mtime, target):
+        self.name = name  # relative path as shown
         self.is_dir = is_dir
         self.is_link = is_link
         self.size = size
@@ -87,10 +86,10 @@ class Entry(object):
         self.target = target  # link text as stored, or None
 
 
-def sort_entries(entries, key, reverse, dirs_first, use_base):
+def sort_entries(entries, key, reverse, dirs_first):
     """Sort in place. key: time|name|size. Name is the tie-break."""
     def label(e):
-        return os.path.normcase(e.base if use_base else e.name)
+        return os.path.normcase(e.name)
 
     def k(e):
         if key == 'time':
@@ -109,7 +108,9 @@ def sort_entries(entries, key, reverse, dirs_first, use_base):
 def format_entry(e, width, args):
     """One output line (native str type; see Output)."""
     size = DIR_MARK if e.is_dir else format_size(e.size, args.human)
-    name = e.base if args.by_dir else e.name
+    name = e.name
+    if e.is_dir:
+        name += os.sep
     if args.posix and IS_WIN:
         name = name.replace('\\', '/')
     if args.names:
@@ -156,7 +157,7 @@ def free_bytes(path):
     return None
 
 
-def make_entry(name, base, full, st):
+def make_entry(name, full, st):
     mode = st.st_mode
     is_link = stat.S_ISLNK(mode) or (
         getattr(st, 'st_reparse_tag', 0) == IO_REPARSE_TAG_MOUNT_POINT)
@@ -166,7 +167,7 @@ def make_entry(name, base, full, st):
             target = os.readlink(full)
         except (OSError, AttributeError, ValueError):
             target = None  # e.g. py2 on Windows has no os.readlink
-    return Entry(name, base, stat.S_ISDIR(mode) and not is_link, is_link,
+    return Entry(name, stat.S_ISDIR(mode) and not is_link, is_link,
                  st.st_size, st.st_mtime, target)
 
 
@@ -270,32 +271,31 @@ def resolve_target(arg, multi):
     if os.path.lexists(arg):
         return Spec('file', arg, None, None, ''), None
     dirpart, base = os.path.split(arg)
-    if not has_magic(base):
-        return None, '%s: not found' % arg
     if has_magic(dirpart):
         return None, '%s: wildcards in directory part not supported' % arg
     root = dirpart or DOT
     if not os.path.isdir(root):
         return None, '%s: not found' % root
+    if not has_magic(base):
+        base = '*' + base + '*'  # fd-style implicit substring match
     return Spec('glob', arg, root, base, dirpart), None
 
 
 def collect(spec, args, ignore_case, status):
-    """Return list of (header, entries, filtered) groups for one Spec."""
+    """Return list of per-directory entry lists for one Spec, in directory
+    name order (depth first)."""
     if spec.kind == 'file':
         try:
             st = os.lstat(spec.arg)
         except OSError as e:
             status.error('%s: %s' % (spec.arg, e.strerror or e))
             return []
-        return [(spec.arg, [make_entry(spec.arg, spec.arg, spec.arg, st)],
-                 False)]
+        return [[make_entry(spec.arg, spec.arg, st)]]
     matcher = make_matcher(spec.pattern, ignore_case) if spec.pattern else None
     groups = []
-    stack = [('', spec.arg if spec.kind == 'dir' else spec.root)]
-    # stack item: (relpath under root, header)
+    stack = ['']  # relative directory paths still to list
     while stack:
-        rel_dir, header = stack.pop()
+        rel_dir = stack.pop()
         path = os.path.join(spec.root, rel_dir) if rel_dir else spec.root
         try:
             names = os.listdir(path)
@@ -313,15 +313,14 @@ def collect(spec, args, ignore_case, status):
                 continue
             rel = os.path.join(rel_dir, n) if rel_dir else n
             e = make_entry(os.path.join(spec.prefix, rel) if spec.prefix
-                           else rel, n, full, st)
+                           else rel, full, st)
             if matcher is None or matcher(n):
                 entries.append(e)
             if args.recursive and e.is_dir:
-                subdirs.append((rel, n))
-        groups.append((header, entries, matcher is not None))
-        subdirs.sort(key=lambda s: os.path.normcase(s[1]), reverse=True)
-        for rel, n in subdirs:  # reversed so pop gives name order
-            stack.append((rel, os.path.join(header, n)))
+                subdirs.append((n, rel))
+        groups.append(entries)
+        subdirs.sort(key=lambda s: os.path.normcase(s[0]), reverse=True)
+        stack.extend(rel for _, rel in subdirs)  # reversed: pop = name order
     return groups
 
 
@@ -339,7 +338,8 @@ def build_parser():
     p.add_argument('-R', '--recursive', action='store_true',
                    help='recurse; flat list of relative paths')
     p.add_argument('--by-dir', action='store_true',
-                   help='group output per directory (implies -R)')
+                   help='like -R, but keep entries of each directory together '
+                        '(implies -R)')
     p.add_argument('-r', '--reverse', action='store_true',
                    help='reverse sort order')
     p.add_argument('--sort', choices=('time', 'name', 'size'),
@@ -399,45 +399,29 @@ def main(argv=None):
         if free_path is None:
             free_path = spec.root or os.path.dirname(spec.arg) or DOT
         groups = collect(spec, args, args.ignore_case, status)
-        if spec.pattern and not any(g[1] for g in groups):
+        if spec.pattern and not any(groups):
             status.error('%s: no match' % spec.arg, code=1)
         all_groups.extend(groups)
 
-    dirs_first = args.group_directories_first and (
-        not args.recursive or args.by_dir)
     free = free_bytes(free_path) if (show_summary and free_path) else None
 
+    entries = []
     if args.by_dir:
-        total = [0, 0, 0]
-        shown = 0
-        for header, entries, filtered in all_groups:
-            if filtered and not entries:
-                continue
-            sort_entries(entries, args.sort, args.reverse, dirs_first, True)
-            hdr = header.replace('\\', '/') if (args.posix and IS_WIN) \
-                else header
-            out.write(hdr + ':')
-            counts = render(entries, args, out)
-            if show_summary:
-                out.write(summary_line(counts[0], counts[1], counts[2],
-                                       None, args.human))
-            out.write('')
-            shown += 1
-            total = [a + b for a, b in zip(total, counts)]
-        if show_summary and shown > 1:
-            out.write('Total: ' + summary_line(total[0], total[1], total[2],
-                                               free, args.human))
-        elif show_summary and shown == 1 and free is not None:
-            out.write('Free: ' + format_size(free, args.human))
+        # flat lines; entries of one directory stay adjacent
+        dirs_first = args.group_directories_first
+        for group in all_groups:
+            sort_entries(group, args.sort, args.reverse, dirs_first)
+            entries.extend(group)
     else:
-        entries = []
-        for _, es, _ in all_groups:
-            entries.extend(es)
-        sort_entries(entries, args.sort, args.reverse, dirs_first, False)
-        counts = render(entries, args, out)
-        if show_summary:
-            out.write(summary_line(counts[0], counts[1], counts[2], free,
-                                   args.human))
+        for group in all_groups:
+            entries.extend(group)
+        # dirs-first is per directory, so it does not apply to flat -R
+        dirs_first = args.group_directories_first and not args.recursive
+        sort_entries(entries, args.sort, args.reverse, dirs_first)
+    counts = render(entries, args, out)
+    if show_summary:
+        out.write(summary_line(counts[0], counts[1], counts[2], free,
+                               args.human))
 
     if status.errors:
         err_write('l.py: %d error%s (see above)'

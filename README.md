@@ -22,7 +22,11 @@ A TARGET is:
   * a file: that file is listed
   * a wildcard (`*`, `?`, `[...]`): matched against names, not recursive
     unless `-R`
+  * anything else that does not exist: fd-style substring match, so
+    `l.py foo` means `*foo*` (`src/foo` means `src/*foo*`)
   * omitted: the current directory
+
+An existing file or directory always wins over a substring match.
 
 Examples:
 
@@ -31,7 +35,7 @@ l.py                  # current directory
 l.py -h src/          # human sizes
 l.py "*.py"           # wildcard, this directory only
 l.py -R "*.py"        # all .py files below, flat relative paths
-l.py --by-dir -R      # grouped per directory
+l.py --by-dir         # like -R, entries of a directory kept together
 l.py --names -R | xargs ...
 ```
 
@@ -40,7 +44,7 @@ l.py --names -R | xargs ...
 | Option                      | Meaning                                                  |
 |-----------------------------|----------------------------------------------------------|
 | `-R`, `--recursive`         | Recurse. Flat list of relative paths, sorted across tree |
-| `--by-dir`                  | Grouped per directory (implies `-R`)                     |
+| `--by-dir`                  | Like `-R`; each directory's entries stay together        |
 | `-r`, `--reverse`           | Reverse sort                                             |
 | `--sort time\|name\|size`   | Sort key, default `time`. Name is the tie-break          |
 | `--group-directories-first` | Directories first (ignored by flat `-R`)                 |
@@ -58,6 +62,7 @@ l.py --names -R | xargs ...
 ## Behavior
 
   * Hidden entries are shown. `.` and `..` are not.
+  * Directory names end with a path separator (`sub/`).
   * Links show as `name -> target` and are never followed.
   * Times are local modification time. Bad times show `????-??-?? ??:??`.
   * Unprintable characters print as `\xe9` style escapes. A closing note on

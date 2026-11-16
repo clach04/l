@@ -62,18 +62,18 @@ class PureTests(unittest.TestCase):
 
     def test_sort(self):
         def E(n, d, s, t):
-            return l.Entry(n, n, d, False, s, t, None)
+            return l.Entry(n, d, False, s, t, None)
         es = [E('b', False, 5, 3), E('a', False, 9, 1), E('d', True, 0, 2)]
         names = lambda: [e.name for e in es]  # noqa: E731
-        l.sort_entries(es, 'time', False, False, False)
+        l.sort_entries(es, 'time', False, False)
         self.assertEqual(names(), ['a', 'd', 'b'])
-        l.sort_entries(es, 'time', True, False, False)
+        l.sort_entries(es, 'time', True, False)
         self.assertEqual(names(), ['b', 'd', 'a'])
-        l.sort_entries(es, 'size', False, False, False)
+        l.sort_entries(es, 'size', False, False)
         self.assertEqual(names(), ['d', 'b', 'a'])
-        l.sort_entries(es, 'name', False, True, False)
+        l.sort_entries(es, 'name', False, True)
         self.assertEqual(names(), ['d', 'a', 'b'])
-        l.sort_entries(es, 'name', True, True, False)
+        l.sort_entries(es, 'name', True, True)
         self.assertEqual(names(), ['d', 'b', 'a'])
 
     def test_summary(self):
@@ -108,7 +108,7 @@ class CliTests(unittest.TestCase):
         order = [ln.split()[-1] for ln in out.splitlines()]
         # mtimes: old 1.0e9, deep n/a, .hidden 1.3e9, new 1.6e9, sub = now
         self.assertEqual(order[:3], ['old.txt', '.hidden', 'new.py'])
-        self.assertEqual(set(order), set(['old.txt', 'new.py', '.hidden', 'sub']))
+        self.assertEqual(set(order), set(['old.txt', 'new.py', '.hidden', 'sub' + os.sep]))
 
     def test_line_format(self):
         code, out, err = run(['old.txt'], cwd=self.d)
@@ -126,7 +126,7 @@ class CliTests(unittest.TestCase):
         code, out, err = run(['--group-directories-first'], cwd=self.d)
         first = out.splitlines()[0]
         self.assertIn('<DIR>', first)
-        self.assertTrue(first.endswith(' sub'), first)
+        self.assertTrue(first.endswith(' sub' + os.sep), first)
 
     def test_reverse(self):
         code, out, err = run(['-r'], cwd=self.d)
@@ -161,8 +161,21 @@ class CliTests(unittest.TestCase):
         self.assertIn('not a directory', err)
         self.assertIn('1 error', err)
 
-    def test_missing_literal(self):
+    def test_missing_literal_is_no_match(self):
         code, out, err = run(['nope.txt'], cwd=self.d)
+        self.assertEqual(code, 1)
+        self.assertIn('no match', err)
+
+    def test_implicit_substring(self):
+        code, out, err = run(['ew'], cwd=self.d)
+        self.assertEqual(self.names(out), ['new.py'])
+        code, out, err = run(['-R', 'deep'], cwd=self.d)
+        self.assertEqual(self.names(out), [os.path.join('sub', 'deep.py')])
+        code, out, err = run(['sub/ee'], cwd=self.d)
+        self.assertEqual(self.names(out), ['sub' + os.sep + 'deep.py'])
+
+    def test_missing_dir_part(self):
+        code, out, err = run(['nodir/x'], cwd=self.d)
         self.assertEqual(code, 2)
         self.assertIn('not found', err)
 
@@ -182,11 +195,17 @@ class CliTests(unittest.TestCase):
         self.assertTrue(out.strip().endswith(' 1.5K old.txt'), out)
 
     def test_by_dir(self):
+        s = os.sep
+        deep = 'sub' + s + 'deep.py'
+        code, out, err = run(['-R', '--names'], cwd=self.d)
+        # flat -R: one global time order, directories interleaved
+        self.assertEqual(out.splitlines(),
+                         ['old.txt', '.hidden', deep, 'new.py', 'sub' + s])
         code, out, err = run(['--by-dir', '--names'], cwd=self.d)
-        lines = out.splitlines()
-        self.assertEqual(lines[0], '.:')
-        self.assertIn(os.path.join('.', 'sub') + ':', lines)
-        self.assertIn('deep.py', lines)
+        # same flat lines, but one directory's entries stay together
+        self.assertEqual(out.splitlines(),
+                         ['old.txt', '.hidden', 'new.py', 'sub' + s, deep])
+        self.assertNotIn(':', out)
 
     def test_summary_flag(self):
         code, out, err = run(['-s', '*.py'], cwd=self.d)
