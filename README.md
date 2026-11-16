@@ -1,0 +1,76 @@
+# l.py
+
+ls/dir-like directory lister with fd-style usability. One stdlib-only file,
+Python 2.7 and 3.
+
+Default output is like `ls -altr` / `dir /od`: oldest first, newest at the
+bottom.
+
+```
+2026-11-16 08:48  1468 AGENTS.md
+```
+
+## Usage
+
+```
+l.py [options] [TARGET ...]
+```
+
+A TARGET is:
+
+  * a directory (trailing slash forces this): its entries are listed
+  * a file: that file is listed
+  * a wildcard (`*`, `?`, `[...]`): matched against names, not recursive
+    unless `-R`
+  * omitted: the current directory
+
+Examples:
+
+```
+l.py                  # current directory
+l.py -h src/          # human sizes
+l.py "*.py"           # wildcard, this directory only
+l.py -R "*.py"        # all .py files below, flat relative paths
+l.py --by-dir -R      # grouped per directory
+l.py --names -R | xargs ...
+```
+
+## Options
+
+| Option                      | Meaning                                                  |
+|-----------------------------|----------------------------------------------------------|
+| `-R`, `--recursive`         | Recurse. Flat list of relative paths, sorted across tree |
+| `--by-dir`                  | Grouped per directory (implies `-R`)                     |
+| `-r`, `--reverse`           | Reverse sort                                             |
+| `--sort time\|name\|size`   | Sort key, default `time`. Name is the tie-break          |
+| `--group-directories-first` | Directories first (ignored by flat `-R`)                 |
+| `-h`                        | Human sizes like `ls -lh` (`1.5K`)                       |
+| `-i`, `--ignore-case`       | Case-insensitive wildcards                               |
+| `--case-sensitive`          | Case-sensitive wildcards (default is platform native)    |
+| `-s`, `--summary`           | Always print summary (default: only on a tty)            |
+| `--names`                   | Names only, one per line                                 |
+| `--posix`                   | Print `/` in names on Windows                            |
+| `--utf8`                    | Force UTF-8 output                                       |
+| `--help`                    | Help (`-h` is human sizes)                               |
+
+`L_OPTS` holds default options, e.g. `L_OPTS=-h`. Command-line options win.
+
+## Behavior
+
+  * Hidden entries are shown. `.` and `..` are not.
+  * Links show as `name -> target` and are never followed.
+  * Times are local modification time. Bad times show `????-??-?? ??:??`.
+  * Unprintable characters print as `\xe9` style escapes. A closing note on
+    stderr counts such names. Use `--utf8` for copy/paste-safe output.
+  * Errors go to stderr, with a closing `N errors` line. Exit code: 1 for no
+    wildcard match, 2 for other errors.
+
+## Tests
+
+```bash
+py -3 test_l.py
+py -2 test_l.py
+```
+
+See [TODO.md](TODO.md) for known gaps and [CONTEXT.md](CONTEXT.md) for the
+glossary. The agreed spec is in `docs/plans_done/initial_plan.md`.
