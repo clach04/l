@@ -17,6 +17,11 @@ import stat
 import sys
 import time
 
+try:  # optional, Windows ANSI support
+    import colorama
+except ImportError:
+    colorama = None
+
 PY3 = sys.version_info >= (3,)
 IS_WIN = os.name == 'nt'
 text_type = type(u'')
@@ -95,15 +100,17 @@ def make_matcher(pattern, ignore_case):
 
 class Entry(object):
     """One listed file, directory or link."""
-    __slots__ = ('name', 'is_dir', 'is_link', 'size', 'mtime', 'target')
+    __slots__ = ('name', 'is_dir', 'is_link', 'size', 'mtime', 'target',
+                 'mode')
 
-    def __init__(self, name, is_dir, is_link, size, mtime, target):
+    def __init__(self, name, is_dir, is_link, size, mtime, target, mode=0):
         self.name = name  # relative path as shown
         self.is_dir = is_dir
         self.is_link = is_link
         self.size = size
         self.mtime = mtime
         self.target = target  # link text as stored, or None
+        self.mode = mode  # st_mode, for the executable check
 
 
 def sort_entries(entries, key, reverse, dirs_first):
@@ -133,6 +140,8 @@ def format_entry(e, width, args):
         name += os.sep
     if args.posix and IS_WIN:
         name = name.replace('\\', '/')
+    if args.palette is not None:
+        name = args.palette.paint(e, name)
     if args.names:
         return name
     if e.target is not None:
@@ -152,6 +161,76 @@ def summary_line(files, dirs, nbytes, free, human):
     if free is not None:
         parts.append(b(free) + ' free')
     return ', '.join(parts)
+
+
+# ---------------------------------------------------------------- color
+
+DEFAULT_COLORS = {'di': '01;34', 'ln': '01;36', 'ex': '01;32'}
+LS_COLOR_TYPES = ('di', 'ln', 'ex', 'fi')  # other LS_COLORS keys ignored
+SGR_OK = re.compile(r'^[0-9;]*$')  # reject anything but SGR parameters
+WIN_EXECUTABLE = ('.exe', '.bat', '.cmd', '.com')
+
+
+class Palette(object):
+    """Name colors from LS_COLORS (GNU dircolors format) over defaults.
+    Supported: di, ln, ex, fi and *.glob keys. Last matching glob wins."""
+
+    def __init__(self, ls_colors=None):
+        self.types = dict(DEFAULT_COLORS)
+        self.globs = []
+        for item in (ls_colors or '').split(':'):
+            key, sep, val = item.partition('=')
+            if not sep or not SGR_OK.match(val):
+                continue
+            if key.startswith('*'):
+                self.globs.append((key, val))
+            elif key in LS_COLOR_TYPES:
+                self.types[key] = val
+
+    def style(self, e):
+        """SGR parameter string for an Entry, '' for none."""
+        if e.is_link:
+            return self.types.get('ln', '')
+        if e.is_dir:
+            return self.types.get('di', '')
+        base = os.path.basename(e.name)
+        if IS_WIN:
+            executable = base.lower().endswith(WIN_EXECUTABLE)
+        else:
+            executable = bool(e.mode & 0o111)
+        if executable:
+            return self.types.get('ex', '')
+        for pat, val in reversed(self.globs):
+            if fnmatch.fnmatch(base, pat):
+                return val
+        return self.types.get('fi', '')
+
+    def paint(self, e, name):
+        sgr = self.style(e)
+        if not sgr:
+            return name
+        return '[%sm%s[0m' % (sgr, name)
+
+
+def color_enabled(mode, env, isatty, have_colorama, is_win):
+    """mode: auto|always|never. auto needs a tty, no NO_COLOR, and a
+    terminal likely to understand ANSI."""
+    if mode == 'always':
+        return True
+    if mode == 'never' or env.get('NO_COLOR') or not isatty:
+        return False
+    return bool(have_colorama or not is_win or 'TERM' in env
+                or 'TERM_PROGRAM' in env or 'WT_SESSION' in env)
+
+
+def init_colorama():
+    """Enable ANSI on old Windows consoles when colorama is available."""
+    if colorama is None:
+        return
+    try:
+        colorama.just_fix_windows_console()
+    except AttributeError:  # older colorama
+        colorama.init()
 
 
 # ---------------------------------------------------------------- platform
@@ -188,7 +267,7 @@ def make_entry(name, full, st):
         except (OSError, AttributeError, ValueError):
             target = None  # e.g. py2 on Windows has no os.readlink
     return Entry(name, stat.S_ISDIR(mode) and not is_link, is_link,
-                 st.st_size, st.st_mtime, target)
+                 st.st_size, st.st_mtime, target, mode)
 
 
 # ---------------------------------------------------------------- output
@@ -385,6 +464,10 @@ def build_parser():
                    help='hide dotfiles and Windows hidden entries')
     p.add_argument('--hidden', dest='no_hidden', action='store_const',
                    const=False, help='show hidden entries (default)')
+    p.add_argument('--color', choices=('auto', 'always', 'never'),
+                   default='auto', metavar='WHEN',
+                   help='color names using LS_COLORS: auto (tty only, '
+                        'honors NO_COLOR), always, never')
     p.add_argument('--skip', type=csv, default=None, metavar='A,B,C',
                    help='-R lists but does not enter directories matching '
                         'these names (wildcards ok); replaces the default '
@@ -423,6 +506,13 @@ def main(argv=None):
     args.skip_patterns = list(DEFAULT_SKIP if args.skip is None else args.skip)
     for extra in args.skip_also:
         args.skip_patterns.extend(extra)
+    isatty = sys.stdout.isatty()
+    args.palette = None
+    if color_enabled(args.color, os.environ, isatty, colorama is not None,
+                     IS_WIN):
+        args.palette = Palette(os.environ.get('LS_COLORS'))
+        if isatty:  # piped output stays raw ANSI
+            init_colorama()
     status = Status()
     out = Output(args.utf8, status)
     targets = args.targets or [DOT]

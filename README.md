@@ -55,6 +55,7 @@ l.py --names -R | xargs ...
 | `--hidden`                  | Show hidden entries (default); undoes `--no-hidden`      |
 | `--skip=A,B`                | `-R` does not enter these dirs; replaces defaults        |
 | `--skip-also=A,B`           | Add names to the skip list                               |
+| `--color=WHEN`              | `auto` (tty only), `always`, `never`. Uses `LS_COLORS`   |
 | `-s`, `--summary`           | Always print summary (default: only on a tty)            |
 | `--names`                   | Names only, one per line                                 |
 | `--posix`                   | Print `/` in names on Windows                            |
@@ -77,6 +78,11 @@ l.py --names -R | xargs ...
     Target to look inside, e.g. `l.py -R .git`.
   * Directory names end with a path separator (`sub/`).
   * Links show as `name -> target` and are never followed.
+  * Color applies to the name only. `LS_COLORS` is read for `di`, `ln`, `ex`,
+    `fi` and `*.ext` keys over a built-in default (dirs bold blue, links cyan,
+    executables green). `auto` needs a tty and honors `NO_COLOR`.
+    `--color=always` ignores `NO_COLOR`. On Windows, `colorama` is used if
+    installed.
   * Times are local modification time. Bad times show `????-??-?? ??:??`.
   * Unprintable characters print as `\xe9` style escapes. A closing note on
     stderr counts such names. Use `--utf8` for copy/paste-safe output.
@@ -84,6 +90,12 @@ l.py --names -R | xargs ...
     wildcard match, 2 for other errors.
 
 ## Aliases
+
+Unix shell
+
+    alias l="py -3 l.py"
+    export L_OPTS="--color always"
+
 
 Windows CMD.exe
 

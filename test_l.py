@@ -83,6 +83,44 @@ class PureTests(unittest.TestCase):
                          '1 files, 0 dirs, 2.0K')
 
 
+class ColorTests(unittest.TestCase):
+    def E(self, name, is_dir=False, is_link=False, mode=0o644):
+        return l.Entry(name, is_dir, is_link, 1, 0, None, mode)
+
+    def test_palette_defaults(self):
+        p = l.Palette(None)
+        self.assertEqual(p.style(self.E('d', is_dir=True)), '01;34')
+        self.assertEqual(p.style(self.E('l', is_link=True)), '01;36')
+        self.assertEqual(p.style(self.E('f')), '')
+
+    def test_palette_ls_colors(self):
+        p = l.Palette('di=01;35:*.tar=01;31:*.tar.gz=01;32:rs=0:or=40;31:'
+                      'ln=:bad=\x1b[1m:*.x=\x1b[1m')
+        self.assertEqual(p.style(self.E('d', is_dir=True)), '01;35')
+        self.assertEqual(p.style(self.E('a.tar')), '01;31')
+        self.assertEqual(p.style(self.E('a.tar.gz')), '01;32')
+        self.assertEqual(p.style(self.E('l', is_link=True)), '')  # ln= empty
+        self.assertEqual(p.style(self.E('a.x')), '')  # escape rejected
+        self.assertEqual(p.types.get('rs'), None)  # unsupported key ignored
+
+    @unittest.skipIf(os.name == 'nt', 'POSIX exec bit')
+    def test_palette_executable_beats_glob(self):
+        p = l.Palette('*.sh=0;33')
+        self.assertEqual(p.style(self.E('a.sh', mode=0o755)), '01;32')
+        self.assertEqual(p.style(self.E('a.sh')), '0;33')
+
+    def test_color_enabled(self):
+        f = l.color_enabled
+        self.assertTrue(f('always', {'NO_COLOR': '1'}, False, False, True))
+        self.assertFalse(f('never', {}, True, True, False))
+        self.assertFalse(f('auto', {}, False, True, False))  # not a tty
+        self.assertFalse(f('auto', {'NO_COLOR': '1'}, True, True, False))
+        self.assertTrue(f('auto', {}, True, False, False))  # POSIX tty
+        self.assertFalse(f('auto', {}, True, False, True))  # bare Windows
+        self.assertTrue(f('auto', {}, True, True, True))  # colorama
+        self.assertTrue(f('auto', {'WT_SESSION': 'x'}, True, False, True))
+
+
 class CliTests(unittest.TestCase):
     def setUp(self):
         self.d = tempfile.mkdtemp()
@@ -349,6 +387,37 @@ class CliTests(unittest.TestCase):
         code, out, err = run(['-R', '--names', 'sub', '--skip-also=sub'],
                              cwd=self.d)
         self.assertEqual(out.splitlines(), ['deep.py'])
+
+    def test_color_never_and_auto_piped(self):
+        code, out, err = run(['--names', 'new'], cwd=self.d)
+        self.assertEqual(out.splitlines(), ['new.py'])  # auto, piped: plain
+        code, out, err = run(['--color=never', '--names', 'new'], cwd=self.d)
+        self.assertEqual(out.splitlines(), ['new.py'])
+
+    def test_color_always_uses_ls_colors(self):
+        env = {'LS_COLORS': 'di=01;35:*.py=0;33'}
+        code, out, err = run(['--color=always', '--names'], cwd=self.d,
+                             env=env)
+        names = out.splitlines()
+        self.assertIn('\x1b[0;33mnew.py\x1b[0m', names)
+        self.assertIn('\x1b[01;35msub' + os.sep + '\x1b[0m', names)
+        self.assertIn('old.txt', names)  # no matching style: plain
+
+    def test_color_always_defaults_and_no_color_env(self):
+        env = {'NO_COLOR': '1'}  # ignored by --color=always
+        code, out, err = run(['--color=always', '--names', 'sub'], cwd=self.d,
+                             env=env)
+        self.assertEqual(out.splitlines(), ['deep.py'])
+        code, out, err = run(['--color=always', '--names', '-R', 'su'],
+                             cwd=self.d, env=env)
+        self.assertIn('\x1b[01;34msub' + os.sep + '\x1b[0m', out.splitlines())
+
+    def test_color_line_keeps_columns_plain(self):
+        code, out, err = run(['--color=always', 'new.py'], cwd=self.d,
+                             env={'LS_COLORS': '*.py=0;33'})
+        line = out.strip()
+        self.assertTrue(line.endswith(' 1 \x1b[0;33mnew.py\x1b[0m'), repr(line))
+        self.assertEqual(line[13], ':')  # time column not colored
 
     def test_bad_flag(self):
         code, out, err = run(['--nope'], cwd=self.d)

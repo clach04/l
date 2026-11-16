@@ -11,15 +11,19 @@
   * Summary footer on a real tty is untested. Tests run piped, so only `-s`
     is covered.
 
+  * Color: the optional `colorama` path is untested (not installed here), as
+    is color on a real Windows console.
+
 ## Known limits
 
   * Wide East Asian characters can misalign columns.
   * Python 2 on Windows has no `os.readlink`, so link targets are not shown.
+  * Color: only the name is colored (not `-> target`); other `LS_COLORS` keys
+    (`or`, `mi`, `so`, ...) are ignored.
   * Python 2 on Windows: the hidden attribute is not seen, only dotfiles.
 
 ## Deferred
 
-  * Color support.
   * C version.
   * `--si` (base 1000 sizes).
   * atime / ctime.

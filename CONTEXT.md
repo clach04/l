@@ -22,6 +22,9 @@ _Avoid_: tree
 A flat listing where the Entries of one directory stay adjacent, sorted within each directory. Same lines as a flat listing, no headers.
 _Avoid_: grouped listing, tree (headers per directory are not wanted)
 
+**Palette**:
+The colors applied to Entry names, taken from `LS_COLORS` over built-in defaults.
+
 **Skip list**:
 Directory names (wildcards allowed) that a recursive listing shows as Entries but does not descend into. Never applies to a Target.
 
