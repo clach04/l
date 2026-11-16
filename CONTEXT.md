@@ -22,6 +22,9 @@ _Avoid_: tree
 A flat listing where the Entries of one directory stay adjacent, sorted within each directory. Same lines as a flat listing, no headers.
 _Avoid_: grouped listing, tree (headers per directory are not wanted)
 
+**Skip list**:
+Directory names (wildcards allowed) that a recursive listing shows as Entries but does not descend into. Never applies to a Target.
+
 **Summary**:
 The footer with file count, directory count, total size, and free space.
 

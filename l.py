@@ -26,9 +26,10 @@ DOT = u'.' if (not PY3 and IS_WIN) else '.'  # py2 Windows needs unicode paths
 IO_REPARSE_TAG_MOUNT_POINT = 0xA0000003  # Windows junction
 ENV_OPTS = 'L_OPTS'
 FILE_ATTRIBUTE_HIDDEN = 0x2
-# version control directories: listed under -R, never entered
-VCS_DIRS = frozenset(os.path.normcase(n)
-                     for n in ('.git', '.hg', '.svn', '.bzr', 'CVS'))
+# directory name patterns listed under -R but not entered (--skip replaces)
+DEFAULT_SKIP = ('.git', '.hg', '.svn', '.bzr', 'CVS',
+                '__pycache__', '.pytest_cache', '.mypy_cache', '.ruff_cache',
+                '.tox', '.venv', 'node_modules')
 
 if PY3:
     _LONE_SURROGATE = re.compile(u'[\ud800-\udfff]')
@@ -68,8 +69,13 @@ def is_hidden(name, st):
             or bool(getattr(st, 'st_file_attributes', 0) & FILE_ATTRIBUTE_HIDDEN))
 
 
-def is_vcs_dir(name):
-    return os.path.normcase(name) in VCS_DIRS
+def is_skipped(name, patterns):
+    """fnmatch with the platform case rule."""
+    return any(fnmatch.fnmatch(name, p) for p in patterns)
+
+
+def csv(text):
+    return [x for x in text.split(',') if x]
 
 
 def has_magic(s):
@@ -332,9 +338,10 @@ def collect(spec, args, ignore_case, status):
                            else rel, full, st)
             if matcher is None or matcher(n):
                 entries.append(e)
-            # VCS dirs met during the walk are listed but not entered; a
-            # VCS dir given as the Target is the walk root, so it is entered
-            if args.recursive and e.is_dir and not is_vcs_dir(n):
+            # skip-list dirs met during the walk are listed but not entered;
+            # one given as the Target is the walk root, so it is entered
+            if (args.recursive and e.is_dir
+                    and not is_skipped(n, args.skip_patterns)):
                 subdirs.append((n, rel))
         groups.append(entries)
         subdirs.sort(key=lambda s: os.path.normcase(s[0]), reverse=True)
@@ -378,6 +385,13 @@ def build_parser():
                    help='hide dotfiles and Windows hidden entries')
     p.add_argument('--hidden', dest='no_hidden', action='store_const',
                    const=False, help='show hidden entries (default)')
+    p.add_argument('--skip', type=csv, default=None, metavar='A,B,C',
+                   help='-R lists but does not enter directories matching '
+                        'these names (wildcards ok); replaces the default '
+                        'list; empty disables. Default: %s'
+                        % ','.join(DEFAULT_SKIP))
+    p.add_argument('--skip-also', type=csv, action='append', default=[],
+                   metavar='A,B,C', help='add names to the skip list')
     p.add_argument('-s', '--summary', action='store_true',
                    help='always print summary (default: only on a tty)')
     p.add_argument('--names', action='store_true',
@@ -406,6 +420,9 @@ def main(argv=None):
     args = build_parser().parse_args(get_argv(argv))
     if args.by_dir:
         args.recursive = True
+    args.skip_patterns = list(DEFAULT_SKIP if args.skip is None else args.skip)
+    for extra in args.skip_also:
+        args.skip_patterns.extend(extra)
     status = Status()
     out = Output(args.utf8, status)
     targets = args.targets or [DOT]

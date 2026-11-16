@@ -300,6 +300,56 @@ class CliTests(unittest.TestCase):
         code, out, err = run(['--names', '.git/hooks'], cwd=self.d)
         self.assertEqual(code, 0, err)
 
+    def make_pycache(self):
+        os.makedirs(os.path.join(self.d, '__pycache__'))
+        self.mk(os.path.join('__pycache__', 'x.pyc'), 'c', 1400000000)
+        os.makedirs(os.path.join(self.d, '.git'))
+        self.mk(os.path.join('.git', 'HEAD'), 'ref', 1400000000)
+
+    def rnames(self, args, env=None):
+        code, out, err = run(['-R', '--names'] + args, cwd=self.d, env=env)
+        self.assertEqual(code, 0, err)
+        return out.splitlines()
+
+    def test_skip_default_includes_pycache(self):
+        self.make_pycache()
+        names = self.rnames([])
+        self.assertIn('__pycache__' + os.sep, names)
+        self.assertNotIn(os.path.join('__pycache__', 'x.pyc'), names)
+
+    def test_skip_replaces_defaults(self):
+        self.make_pycache()
+        names = self.rnames(['--skip=nomatch'])
+        self.assertIn(os.path.join('__pycache__', 'x.pyc'), names)
+        self.assertIn(os.path.join('.git', 'HEAD'), names)
+
+    def test_skip_empty_disables(self):
+        self.make_pycache()
+        names = self.rnames(['--skip='])
+        self.assertIn(os.path.join('__pycache__', 'x.pyc'), names)
+
+    def test_skip_replace_with_list_and_wildcard(self):
+        self.make_pycache()
+        names = self.rnames(['--skip=.git,__py*'])
+        self.assertNotIn(os.path.join('__pycache__', 'x.pyc'), names)
+        self.assertNotIn(os.path.join('.git', 'HEAD'), names)
+        self.assertIn(os.path.join('sub', 'deep.py'), names)
+
+    def test_skip_also_appends(self):
+        self.make_pycache()
+        names = self.rnames(['--skip-also=sub,nothing'])
+        self.assertNotIn(os.path.join('sub', 'deep.py'), names)
+        self.assertIn('sub' + os.sep, names)
+        self.assertNotIn(os.path.join('.git', 'HEAD'), names)  # default kept
+
+    def test_skip_via_env_and_target_exempt(self):
+        self.make_pycache()
+        names = self.rnames([], env={'L_OPTS': '--skip-also=sub'})
+        self.assertNotIn(os.path.join('sub', 'deep.py'), names)
+        code, out, err = run(['-R', '--names', 'sub', '--skip-also=sub'],
+                             cwd=self.d)
+        self.assertEqual(out.splitlines(), ['deep.py'])
+
     def test_bad_flag(self):
         code, out, err = run(['--nope'], cwd=self.d)
         self.assertEqual(code, 2)
