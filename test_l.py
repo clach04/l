@@ -109,6 +109,21 @@ class ColorTests(unittest.TestCase):
         self.assertEqual(p.style(self.E('a.sh', mode=0o755)), '01;32')
         self.assertEqual(p.style(self.E('a.sh')), '0;33')
 
+    def test_mintty_pipe_name(self):
+        bs = chr(92)
+        f = l.is_mintty_pipe_name
+        self.assertTrue(f(bs + 'msys-dd50a72ab4668b33-pty0-to-master'))
+        self.assertTrue(f(bs + 'cygwin-0123456789abcdef-pty12-from-master'))
+        self.assertTrue(f(bs + 'msys-1888ae32e00d56aa-pty1-to-master-nat'))
+        self.assertFalse(f(bs + 'msys-dd50a72ab4668b33-pty0-pipe'))  # plain pipe
+        self.assertFalse(f('msys-dd50a72ab4668b33-pty0-to-master'))  # no leading         self.assertFalse(f(''))
+
+    def test_mintty_pty_false_for_pipe_and_file(self):
+        import io
+        self.assertFalse(l.is_mintty_pty(io.BytesIO()))  # no fileno
+        with open(__file__, 'rb') as f:
+            self.assertFalse(l.is_mintty_pty(f))  # real file
+
     def test_color_enabled(self):
         f = l.color_enabled
         self.assertTrue(f('always', {'NO_COLOR': '1'}, False, False, True))

@@ -14,6 +14,7 @@ import re
 import shlex
 import shutil
 import stat
+import struct
 import sys
 import time
 
@@ -234,6 +235,42 @@ def init_colorama():
 
 
 # ---------------------------------------------------------------- platform
+
+# Git Bash / mintty / Cygwin ptys hand native Windows Python a named pipe,
+# so isatty() is False even though a terminal is attached.
+MINTTY_PIPE = re.compile('^' + re.escape(chr(92)) +
+                         '(cygwin|msys)-[0-9a-f]{16}-pty[0-9]+-(to|from)-master(-nat)?$')  # -nat: newer MSYS2
+FILE_NAME_INFO = 2  # FILE_INFO_BY_HANDLE_CLASS.FileNameInfo
+
+
+def is_mintty_pipe_name(name):
+    return bool(MINTTY_PIPE.match(name))
+
+
+def stream_pipe_name(stream):
+    """Windows handle name behind stream, or None."""
+    try:
+        import ctypes
+        import msvcrt
+        handle = msvcrt.get_osfhandle(stream.fileno())
+        buf = ctypes.create_string_buffer(1024)
+        ok = ctypes.windll.kernel32.GetFileInformationByHandleEx(
+            ctypes.c_void_p(handle), FILE_NAME_INFO, buf, len(buf))
+        if not ok:
+            return None
+        length = struct.unpack('<I', buf.raw[:4])[0]
+        return buf.raw[4:4 + length].decode('utf-16-le')
+    except (ImportError, OSError, ValueError, AttributeError, struct.error):
+        return None  # no fileno, not a handle, no ctypes
+
+
+def is_mintty_pty(stream):
+    """True when stream is a Cygwin/MSYS pty pipe (Windows only)."""
+    if not IS_WIN:
+        return False
+    name = stream_pipe_name(stream)
+    return name is not None and is_mintty_pipe_name(name)
+
 
 def free_bytes(path):
     """Free bytes on path's volume, or None when unavailable."""
@@ -506,18 +543,19 @@ def main(argv=None):
     args.skip_patterns = list(DEFAULT_SKIP if args.skip is None else args.skip)
     for extra in args.skip_also:
         args.skip_patterns.extend(extra)
-    isatty = sys.stdout.isatty()
+    real_tty = sys.stdout.isatty()
+    isatty = real_tty or is_mintty_pty(sys.stdout)
     args.palette = None
     if color_enabled(args.color, os.environ, isatty, colorama is not None,
                      IS_WIN):
         args.palette = Palette(os.environ.get('LS_COLORS'))
-        if isatty:  # piped output stays raw ANSI
+        if real_tty:  # piped (and mintty) output stays raw ANSI
             init_colorama()
     status = Status()
     out = Output(args.utf8, status)
     targets = args.targets or [DOT]
     multi = len(targets) > 1
-    show_summary = args.summary or (sys.stdout.isatty() and not args.names)
+    show_summary = args.summary or (isatty and not args.names)
 
     all_groups = []
     free_path = None

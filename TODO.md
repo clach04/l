@@ -14,6 +14,7 @@
   * Color: the optional `colorama` path is untested (not installed here), as
     is color on a real Windows console.
 
+
 ## Known limits
 
   * Wide East Asian characters can misalign columns.
