@@ -10,7 +10,6 @@ import argparse
 import fnmatch
 import math
 import os
-import re
 import shlex
 import shutil
 import stat
@@ -36,10 +35,6 @@ FILE_ATTRIBUTE_HIDDEN = 0x2
 DEFAULT_SKIP = ('.git', '.hg', '.svn', '.bzr', 'CVS',
                 '__pycache__', '.pytest_cache', '.mypy_cache', '.ruff_cache',
                 '.tox', '.venv', 'node_modules')
-
-if PY3:
-    _LONE_SURROGATE = re.compile(u'[\ud800-\udfff]')
-
 
 # ---------------------------------------------------------------- pure funcs
 
@@ -168,7 +163,7 @@ def summary_line(files, dirs, nbytes, free, human):
 
 DEFAULT_COLORS = {'di': '01;34', 'ln': '01;36', 'ex': '01;32'}
 LS_COLOR_TYPES = ('di', 'ln', 'ex', 'fi')  # other LS_COLORS keys ignored
-SGR_OK = re.compile(r'^[0-9;]*$')  # reject anything but SGR parameters
+SGR_CHARS = '0123456789;'  # LS_COLORS values: SGR parameters only
 WIN_EXECUTABLE = ('.exe', '.bat', '.cmd', '.com')
 
 
@@ -181,7 +176,7 @@ class Palette(object):
         self.globs = []
         for item in (ls_colors or '').split(':'):
             key, sep, val = item.partition('=')
-            if not sep or not SGR_OK.match(val):
+            if not sep or val.strip(SGR_CHARS):
                 continue
             if key.startswith('*'):
                 self.globs.append((key, val))
@@ -238,13 +233,14 @@ def init_colorama():
 
 # Git Bash / mintty / Cygwin ptys hand native Windows Python a named pipe,
 # so isatty() is False even though a terminal is attached.
-MINTTY_PIPE = re.compile('^' + re.escape(chr(92)) +
-                         '(cygwin|msys)-[0-9a-f]{16}-pty[0-9]+-(to|from)-master(-nat)?$')  # -nat: newer MSYS2
+MINTTY_PREFIXES = (chr(92) + 'msys-', chr(92) + 'cygwin-')
 FILE_NAME_INFO = 2  # FILE_INFO_BY_HANDLE_CLASS.FileNameInfo
 
 
 def is_mintty_pipe_name(name):
-    return bool(MINTTY_PIPE.match(name))
+    # loose on purpose: the suffix has changed before (-nat in newer MSYS2)
+    return (name.startswith(MINTTY_PREFIXES) and '-pty' in name
+            and '-master' in name)
 
 
 def stream_pipe_name(stream):
@@ -352,7 +348,8 @@ class Output(object):
                 try:
                     data = line.encode('utf-8')
                 except UnicodeEncodeError:
-                    line = _LONE_SURROGATE.sub(chr(0xFFFD), line)
+                    line = ''.join(chr(0xFFFD) if 0xD800 <= ord(c) <= 0xDFFF
+                                   else c for c in line)  # lone surrogates
                     self.status.lossy += 1
                     data = line.encode('utf-8')
             else:
