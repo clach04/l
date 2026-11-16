@@ -205,7 +205,12 @@ def format_entry(e, width, args):
         return name
     if e.target is not None:
         name = name + ' -> ' + e.target
-    return '%s  %s %s' % (format_time(e.mtime), size.rjust(width), name)
+    when = format_time(e.mtime)
+    pad = ' ' * (width - len(size))  # padding stays uncolored
+    if args.palette is not None:
+        when = args.palette.paint_key('da', when)
+        size = args.palette.paint_key('dm' if e.is_dir else 'sn', size)
+    return '%s  %s%s %s' % (when, pad, size, name)
 
 
 def size_width(entries, args):
@@ -226,8 +231,10 @@ def summary_line(files, dirs, nbytes, free, human):
 
 # ---------------------------------------------------------------- color
 
-DEFAULT_COLORS = {'di': '01;34', 'ln': '01;36', 'ex': '01;32'}
-LS_COLOR_TYPES = ('di', 'ln', 'ex', 'fi')  # other LS_COLORS keys ignored
+# da/sn follow eza's keys (date, size number); dm (dir marker) is ours.
+DEFAULT_COLORS = {'di': '01;34', 'ln': '01;36', 'ex': '01;32',
+                  'da': '2', 'sn': '33', 'dm': '34'}
+LS_COLOR_TYPES = ('di', 'ln', 'ex', 'fi', 'da', 'sn', 'dm')  # others ignored
 SGR_CHARS = '0123456789;'  # LS_COLORS values: SGR parameters only
 WIN_EXECUTABLE = ('.exe', '.bat', '.cmd', '.com')
 
@@ -267,10 +274,15 @@ class Palette(object):
         return self.types.get('fi', '')
 
     def paint(self, e, name):
-        sgr = self.style(e)
-        if not sgr:
-            return name
-        return '\x1b[%sm%s\x1b[0m' % (sgr, name)
+        return self.wrap(self.style(e), name)
+
+    def paint_key(self, key, text):
+        """Color text with the style of a type key (da, sn, dm)."""
+        return self.wrap(self.types.get(key, ''), text)
+
+    @staticmethod
+    def wrap(sgr, text):
+        return '\x1b[%sm%s\x1b[0m' % (sgr, text) if sgr else text
 
 
 def color_enabled(mode, env, isatty, have_colorama, is_win):

@@ -81,9 +81,12 @@ l.py --names -R | xargs ...
     Target to look inside, e.g. `l.py -R .git`.
   * Directory names end with a path separator (`sub/`).
   * Links show as `name -> target` and are never followed.
-  * Color applies to the name only. `LS_COLORS` is read for `di`, `ln`, `ex`,
-    `fi` and `*.ext` keys over a built-in default (dirs bold blue, links cyan,
-    executables green). `auto` needs a tty and honors `NO_COLOR`.
+  * Color (experimental) has three zones: timestamp (`da`, dim), size number
+    (`sn`, yellow), `<DIR>` marker (`dm`, blue), then the name. `LS_COLORS`
+    is read for `di`, `ln`, `ex`, `fi`, `*.ext`, plus `da`, `sn` (eza keys)
+    and `dm` (ours) over a built-in default (dirs bold blue, links cyan,
+    executables green). An empty value (`sn=`) turns a zone off. Padding is
+    never colored. `auto` needs a tty and honors `NO_COLOR`.
     `--color=always` ignores `NO_COLOR`. On Windows, `colorama` is used if
     installed.
   * `--quote` quotes the name only (not `-> target`), and only when needed.

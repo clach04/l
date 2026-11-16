@@ -130,6 +130,10 @@ class ColorTests(unittest.TestCase):
         self.assertEqual(p.style(self.E('d', is_dir=True)), '01;34')
         self.assertEqual(p.style(self.E('l', is_link=True)), '01;36')
         self.assertEqual(p.style(self.E('f')), '')
+        self.assertEqual(p.paint_key('da', 'x'), '\x1b[2mx\x1b[0m')
+        self.assertEqual(p.paint_key('sn', 'x'), '\x1b[33mx\x1b[0m')
+        self.assertEqual(p.paint_key('dm', 'x'), '\x1b[34mx\x1b[0m')
+        self.assertEqual(l.Palette('sn=').paint_key('sn', 'x'), 'x')
 
     def test_palette_ls_colors(self):
         p = l.Palette('di=01;35:*.tar=01;31:*.tar.gz=01;32:rs=0:or=40;31:'
@@ -501,10 +505,24 @@ class CliTests(unittest.TestCase):
 
     def test_color_line_keeps_columns_plain(self):
         code, out, err = run(['--color=always', 'new.py'], cwd=self.d,
-                             env={'LS_COLORS': '*.py=0;33'})
+                             env={'LS_COLORS': '*.py=0;33:da=:sn='})
         line = out.strip()
         self.assertTrue(line.endswith(' 1 \x1b[0;33mnew.py\x1b[0m'), repr(line))
-        self.assertEqual(line[13], ':')  # time column not colored
+        self.assertEqual(line[13], ':')  # da= and sn= empty: not colored
+
+    def test_color_time_size_dirmark(self):
+        code, out, err = run(['--color=always', '--group-directories-first'],
+                             cwd=self.d, env={'LS_COLORS': 'da=0;31:sn=0;32:'
+                                                           'dm=0;35'})
+        first, last = out.splitlines()[0], out.splitlines()[-1]
+        self.assertTrue(first.startswith('\x1b[0;31m'), repr(first))
+        self.assertIn('\x1b[0;35m<DIR>\x1b[0m', first)
+        self.assertIn('\x1b[0;32m1500\x1b[0m', out)  # old.txt size
+        # padding is outside the color so columns line up
+        self.assertIn(' \x1b[0;32m1\x1b[0m', out)
+        code, out, err = run(['--color=always', 'new.py'], cwd=self.d)
+        self.assertTrue(out.startswith('\x1b[2m'), repr(out))  # default dim
+        self.assertIn('\x1b[33m1\x1b[0m', out)  # default yellow size
 
     def test_bad_flag(self):
         code, out, err = run(['--nope'], cwd=self.d)

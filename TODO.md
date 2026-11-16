@@ -19,7 +19,7 @@
 
   * Wide East Asian characters can misalign columns.
   * Python 2 on Windows has no `os.readlink`, so link targets are not shown.
-  * Color: only the name is colored (not `-> target`); other `LS_COLORS` keys
+  * Color: `-> target` is not colored; other `LS_COLORS` keys
     (`or`, `mi`, `so`, ...) are ignored.
   * Python 2 on Windows: the hidden attribute is not seen, only dotfiles.
 
