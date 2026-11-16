@@ -209,7 +209,7 @@ class Palette(object):
         sgr = self.style(e)
         if not sgr:
             return name
-        return '[%sm%s[0m' % (sgr, name)
+        return '\x1b[%sm%s\x1b[0m' % (sgr, name)
 
 
 def color_enabled(mode, env, isatty, have_colorama, is_win):

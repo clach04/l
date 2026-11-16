@@ -6,6 +6,13 @@ Allow non-ASCII only when the file's data semantics require it
 (e.g., person/place names, translations, fixtures, external-source text).
 Do not alter existing non-ASCII data unless explicitly asked.
 
+NO RAW CONTROL CHARACTERS HARD RULE:
+Never embed non-printable bytes (ESC, NUL, BEL, etc.; anything under 0x20 except TAB, LF and CR, or 0x7F)
+in any file. Write them as visible escapes: `\x1b` in Python source and tests, `\033` in shell.
+Tools may turn typed escapes into raw bytes. After writing, verify, e.g.:
+`py -3 -c "print(sum(1 for b in open('FILE','rb').read() if b < 32 and b not in (9,10,13)))"` must print 0.
+If it does not, fix at the byte level (replace byte 27 with a backslash, `x1b`) or build the value at runtime (`chr(27)`).
+
 Be ultra-concise and precise across all outputs. Prefer brevity over grammar.
 
 Follow YAGNI. Prefer one-liners only when clarity is not reduced.
