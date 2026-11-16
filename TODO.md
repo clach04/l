@@ -14,6 +14,9 @@ check on Linux only (looked fine).
     by eye. Junction display is untested.
   * `--quote` output has not been pasted into a real shell (sh, cmd,
     PowerShell).
+  * C version: built and tested on Windows (MinGW gcc 13) only. The POSIX
+    branch passed a syntax check against a shim, never built or run. Never
+    built with MSVC or clang.
   * Color: not checked whether the optional `colorama` path is actually used
     on Windows (modern consoles may not need it).
 
@@ -31,9 +34,12 @@ check on Linux only (looked fine).
     dominates (~80 ms of ~150 ms, outside this program; try `-S` or
     `-I` to check). Of ours, `argparse` is the largest (~15 ms, and it pulls
     in `shutil`, `re`, `gettext`). Done: `colorama` (~10 ms) is now imported
-    only for a Windows tty, and `shutil` only for the footer on Python 3
-    Windows. Next, if it matters: hand-rolled option parsing instead of
-    argparse.
+    only for a Windows tty (confirmed gone in importtime2.txt). `shutil`
+    is still imported (~6-14 ms) by argparse itself: creating a parser calls
+    `shutil.get_terminal_size()`, which loads bz2, lzma and zlib. So
+    argparse really costs ~20-30 ms. Next, if it matters: hand-rolled
+    option parsing instead of argparse (would also drop `re` and
+    `gettext`).
 
   * Revisit footer format. Now `7 files | 4 dirs | 53,875 bytes | N bytes
     free`. Idea: `key:value` (`files:7 dirs:4 size:53,875 free:N`). The
@@ -41,7 +47,9 @@ check on Linux only (looked fine).
     files, so something like `size`/`used` fits better. Or `dir`-style
     aligned two lines.
 
-  * C version.
+  * C version (`l.c`): color (`LS_COLORS`, `da`/`sn`/`dm`, `PATHEXT`), `L_OPTS`,
+    Unicode case folding, mtime sub-second ordering on non-Linux POSIX,
+    Windows paths longer than 260 characters.
   * `--si` (base 1000 sizes).
   * atime / ctime.
   * Short flag for case-sensitive matching.

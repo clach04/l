@@ -14,6 +14,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import l  # noqa: E402
 
+# L_BIN=/path/to/l runs the CLI tests against the C build instead of l.py
+L_BIN = os.environ.get('L_BIN')
+
 
 def run(args, cwd=None, env=None):
     """Run l.py in a subprocess. Returns (code, stdout, stderr) as str."""
@@ -21,13 +24,15 @@ def run(args, cwd=None, env=None):
     e.pop('L_OPTS', None)
     if env:
         e.update(env)
-    p = subprocess.Popen([sys.executable, os.path.join(HERE, 'l.py')] + args,
+    cmd = [L_BIN] if L_BIN else [sys.executable, os.path.join(HERE, 'l.py')]
+    p = subprocess.Popen(cmd + args,
                          cwd=cwd, env=e, stdout=subprocess.PIPE,
                          stderr=subprocess.PIPE)
     o, er = p.communicate()
     return p.returncode, o.decode('utf-8', 'replace'), er.decode('utf-8', 'replace')
 
 
+@unittest.skipIf(L_BIN, 'tests the Python functions')
 class PureTests(unittest.TestCase):
     def test_size_plain(self):
         self.assertEqual(l.format_size(1468), '1468')
@@ -121,6 +126,7 @@ class PureTests(unittest.TestCase):
                          '1 files | 0 dirs | 2.0K')
 
 
+@unittest.skipIf(L_BIN, 'tests the Python functions')
 class ColorTests(unittest.TestCase):
     def E(self, name, is_dir=False, is_link=False, mode=0o644):
         return l.Entry(name, is_dir, is_link, 1, 0, None, mode)
@@ -334,6 +340,7 @@ class CliTests(unittest.TestCase):
         code, out, err = run(['-i', 'NEW.*'], cwd=self.d)
         self.assertEqual(self.names(out), ['new.py'])
 
+    @unittest.skipIf(L_BIN, 'not ported to the C build yet')
     def test_l_opts_env(self):
         code, out, err = run(['old.txt'], cwd=self.d, env={'L_OPTS': '-h'})
         self.assertTrue(out.strip().endswith(' 1.5K old.txt'), out)
@@ -382,6 +389,8 @@ class CliTests(unittest.TestCase):
             self.skipTest('cannot create non-ascii name')
         code, out, err = run(['--utf8', '*.txt'], cwd=self.d)
         self.assertIn(u'caf%c.txt' % 0xe9, out)
+        if L_BIN:
+            return  # C output is always UTF-8: no backslashreplace mode
         env = {'PYTHONIOENCODING': 'ascii'}
         code, out, err = run(['*.txt'], cwd=self.d, env=env)
         self.assertEqual(code, 0, err)
@@ -486,6 +495,7 @@ class CliTests(unittest.TestCase):
         self.assertIn('sub' + os.sep, names)
         self.assertNotIn(os.path.join('.git', 'HEAD'), names)  # default kept
 
+    @unittest.skipIf(L_BIN, 'not ported to the C build yet')
     def test_skip_via_env_and_target_exempt(self):
         self.make_pycache()
         names = self.rnames([], env={'L_OPTS': '--skip-also=sub'})
@@ -500,6 +510,7 @@ class CliTests(unittest.TestCase):
         code, out, err = run(['--color=never', '--names', 'new'], cwd=self.d)
         self.assertEqual(out.splitlines(), ['new.py'])
 
+    @unittest.skipIf(L_BIN, 'not ported to the C build yet')
     def test_color_always_uses_ls_colors(self):
         env = {'LS_COLORS': 'di=01;35:*.py=0;33'}
         code, out, err = run(['--color=always', '--names'], cwd=self.d,
@@ -509,6 +520,7 @@ class CliTests(unittest.TestCase):
         self.assertIn('\x1b[01;35msub' + os.sep + '\x1b[0m', names)
         self.assertIn('old.txt', names)  # no matching style: plain
 
+    @unittest.skipIf(L_BIN, 'not ported to the C build yet')
     def test_color_always_defaults_and_no_color_env(self):
         env = {'NO_COLOR': '1'}  # ignored by --color=always
         code, out, err = run(['--color=always', '--names', 'sub'], cwd=self.d,
@@ -518,6 +530,7 @@ class CliTests(unittest.TestCase):
                              cwd=self.d, env=env)
         self.assertIn('\x1b[01;34msub' + os.sep + '\x1b[0m', out.splitlines())
 
+    @unittest.skipIf(L_BIN, 'not ported to the C build yet')
     def test_color_line_keeps_columns_plain(self):
         code, out, err = run(['--color=always', 'new.py'], cwd=self.d,
                              env={'LS_COLORS': '*.py=0;33:da=:sn='})
@@ -525,6 +538,7 @@ class CliTests(unittest.TestCase):
         self.assertTrue(line.endswith(' 1 \x1b[0;33mnew.py\x1b[0m'), repr(line))
         self.assertEqual(line[13], ':')  # da= and sn= empty: not colored
 
+    @unittest.skipIf(L_BIN, 'not ported to the C build yet')
     def test_color_time_size_dirmark(self):
         code, out, err = run(['--color=always', '--group-directories-first'],
                              cwd=self.d, env={'LS_COLORS': 'da=0;31:sn=0;32:'

@@ -114,6 +114,24 @@ Windows CMD.exe
     doskey l=py -3 C:\full\path\l.py $*
     set PATHEXT=%PATHEXT%;.py
 
+## C version
+
+`l.c` is a single-file C99 port of the core, for fast startup (about 40 ms
+on Windows against about 110 ms for Python; mostly process start). No
+libraries beyond the OS.
+
+```bash
+make                 # gcc -std=c99 -O2 -o l l.c  (l.exe on Windows)
+make test            # runs test_l.py against the C build (L_BIN=...)
+```
+
+Same options and output as `l.py` for: targets, sorting, `-R`, `--by-dir`,
+`-h`, `--commas`, hidden and skip list, `--names`, `--posix`, `--quote`,
+links, footer, errors and exit codes. Not in the C build yet: color
+(`--color` is accepted and ignored), `L_OPTS`. Differences: output is always
+UTF-8 (`--utf8` is accepted and does nothing); `-i` and the Windows case
+rule fold ASCII letters only; whole-second mtime ordering except on Linux.
+
 ## Tests
 
 ```bash
