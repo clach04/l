@@ -7,15 +7,16 @@ endif
 CFLAGS ?= -std=c99 -O2 -Wall -Wextra
 ifeq ($(OS),Windows_NT)
 EXE = .exe
+PYTHON ?= py -3
+else
+PYTHON ?= python3
 endif
-#PYEXE = py -3
-PYEXE = python3
 
 l$(EXE): l.c
 	$(CC) $(CFLAGS) -o $@ l.c
 
 test: l$(EXE)
-	L_BIN=$(CURDIR)/l$(EXE) ${PYEXE} test_l.py
+	L_BIN=$(CURDIR)/l$(EXE) $(PYTHON) test_l.py
 
 clean:
 	rm -f l l.exe
