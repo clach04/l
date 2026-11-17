@@ -16,7 +16,9 @@ check on Linux only (looked fine).
     PowerShell).
   * C version: built and tested on Windows (MinGW gcc 13) only. The POSIX
     branch passed a syntax check against a shim, never built or run. Never
-    built with MSVC or clang.
+    built with MSVC or clang. Color was compared byte for byte with `l.py`
+    when piped, but the Windows console mode switch (ANSI on a real console)
+    and color on a real Linux tty have not been checked.
   * Color: not checked whether the optional `colorama` path is actually used
     on Windows (modern consoles may not need it).
 
@@ -47,9 +49,8 @@ check on Linux only (looked fine).
     files, so something like `size`/`used` fits better. Or `dir`-style
     aligned two lines.
 
-  * C version (`l.c`): color (`LS_COLORS`, `da`/`sn`/`dm`, `PATHEXT`), `L_OPTS`,
-    Unicode case folding, mtime sub-second ordering on non-Linux POSIX,
-    Windows paths longer than 260 characters.
+  * C version (`l.c`): Unicode case folding, mtime sub-second ordering on
+    non-Linux POSIX, Windows paths longer than 260 characters.
   * `--si` (base 1000 sizes).
   * atime / ctime.
   * Short flag for case-sensitive matching.

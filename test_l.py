@@ -340,7 +340,6 @@ class CliTests(unittest.TestCase):
         code, out, err = run(['-i', 'NEW.*'], cwd=self.d)
         self.assertEqual(self.names(out), ['new.py'])
 
-    @unittest.skipIf(L_BIN, 'not ported to the C build yet')
     def test_l_opts_env(self):
         code, out, err = run(['old.txt'], cwd=self.d, env={'L_OPTS': '-h'})
         self.assertTrue(out.strip().endswith(' 1.5K old.txt'), out)
@@ -495,7 +494,6 @@ class CliTests(unittest.TestCase):
         self.assertIn('sub' + os.sep, names)
         self.assertNotIn(os.path.join('.git', 'HEAD'), names)  # default kept
 
-    @unittest.skipIf(L_BIN, 'not ported to the C build yet')
     def test_skip_via_env_and_target_exempt(self):
         self.make_pycache()
         names = self.rnames([], env={'L_OPTS': '--skip-also=sub'})
@@ -510,7 +508,6 @@ class CliTests(unittest.TestCase):
         code, out, err = run(['--color=never', '--names', 'new'], cwd=self.d)
         self.assertEqual(out.splitlines(), ['new.py'])
 
-    @unittest.skipIf(L_BIN, 'not ported to the C build yet')
     def test_color_always_uses_ls_colors(self):
         env = {'LS_COLORS': 'di=01;35:*.py=0;33'}
         code, out, err = run(['--color=always', '--names'], cwd=self.d,
@@ -520,7 +517,6 @@ class CliTests(unittest.TestCase):
         self.assertIn('\x1b[01;35msub' + os.sep + '\x1b[0m', names)
         self.assertIn('old.txt', names)  # no matching style: plain
 
-    @unittest.skipIf(L_BIN, 'not ported to the C build yet')
     def test_color_always_defaults_and_no_color_env(self):
         env = {'NO_COLOR': '1'}  # ignored by --color=always
         code, out, err = run(['--color=always', '--names', 'sub'], cwd=self.d,
@@ -530,7 +526,6 @@ class CliTests(unittest.TestCase):
                              cwd=self.d, env=env)
         self.assertIn('\x1b[01;34msub' + os.sep + '\x1b[0m', out.splitlines())
 
-    @unittest.skipIf(L_BIN, 'not ported to the C build yet')
     def test_color_line_keeps_columns_plain(self):
         code, out, err = run(['--color=always', 'new.py'], cwd=self.d,
                              env={'LS_COLORS': '*.py=0;33:da=:sn='})
@@ -538,7 +533,6 @@ class CliTests(unittest.TestCase):
         self.assertTrue(line.endswith(' 1 \x1b[0;33mnew.py\x1b[0m'), repr(line))
         self.assertEqual(line[13], ':')  # da= and sn= empty: not colored
 
-    @unittest.skipIf(L_BIN, 'not ported to the C build yet')
     def test_color_time_size_dirmark(self):
         code, out, err = run(['--color=always', '--group-directories-first'],
                              cwd=self.d, env={'LS_COLORS': 'da=0;31:sn=0;32:'

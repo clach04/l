@@ -6,8 +6,7 @@
  * Names are UTF-8 internally. On Windows the wide-char API is used and names
  * are converted; on POSIX names are raw bytes and pass through unchanged.
  *
- * Not ported yet (accepted and ignored where noted): color (--color is
- * validated and ignored), L_OPTS, --utf8 (output is always UTF-8).
+ * Not ported: --utf8 (accepted and ignored; output is always UTF-8).
  * TODO: sub-second mtime sort is Linux only; other POSIX uses whole seconds.
  */
 #ifdef _WIN32
@@ -616,7 +615,7 @@ typedef struct {
     u64 size;
     long long sec;
     long nsec;
-    int is_dir, is_link, hidden;
+    int is_dir, is_link, hidden, is_exec; /* is_exec: POSIX x bit */
 } Entry;
 
 typedef struct {
@@ -821,6 +820,7 @@ static int stat_entry(const char *full, const char *base, Entry *e)
     e->nsec = (long)st.st_mtim.tv_nsec;
 #endif
     e->hidden = base[0] == '.';
+    e->is_exec = (st.st_mode & 0111) != 0;
     if (e->is_link) {
         k = readlink(full, buf, sizeof buf - 1);
         if (k >= 0) {
@@ -899,6 +899,8 @@ typedef struct {
     int no_hidden, summary, names, posix;
     int quote; /* 0 off, 1 sh, 2 c */
     int sort;  /* 0 time, 1 name, 2 size */
+    int color; /* 0 auto, 1 always, 2 never */
+    const struct Palette *pal; /* NULL: no color */
     const char **targets;
     int ntargets;
     char **skip;       /* skip patterns */
@@ -930,7 +932,8 @@ static const char HELP[] =
     "  --case-sensitive           case-sensitive wildcard matching\n"
     "  --no-hidden                hide dotfiles and Windows hidden entries\n"
     "  --hidden                   show hidden entries (default)\n"
-    "  --color WHEN               accepted, not implemented in this build\n"
+    "  --color WHEN               color names using LS_COLORS: auto (tty only,\n"
+    "                             honors NO_COLOR), always, never\n"
     "  --skip A,B,C               -R lists but does not enter these dirs\n"
     "                             (wildcards ok); replaces the default list\n"
     "  --skip-also A,B,C          add names to the skip list\n"
@@ -1025,6 +1028,7 @@ static void apply_opt(Args *a, int id, const char *name, const char *val)
         if (strcmp(val, "auto") && strcmp(val, "always") && strcmp(val, "never"))
             usage_error("argument --color: invalid choice: '%s' (choose from "
                         "'auto', 'always', 'never')", val);
+        a->color = !strcmp(val, "always") ? 1 : !strcmp(val, "never") ? 2 : 0;
         break;
     case O_QSTYLE:
         if (!strcmp(val, "sh")) a->quote = 1;
@@ -1360,6 +1364,202 @@ static void sort_entries(EList *l, int key, int reverse, int dirs_first)
         qsort(l->v, l->n, sizeof *l->v, entry_cmp);
 }
 
+/* ------------------------------------------------------------ color */
+
+/* da/sn follow eza's LS_COLORS keys (date, size number); dm (dir marker)
+ * is ours. Values are SGR parameters, "" means no color. */
+typedef struct {
+    char *pat, *sgr;
+} GlobColor;
+
+typedef struct Palette {
+    const char *di, *ln, *ex, *fi, *da, *sn, *dm;
+    GlobColor *globs;
+    int nglobs;
+    char **exts; /* Windows executable extensions, lowercase */
+    int nexts;
+} Palette;
+
+static int sgr_valid(const char *v)
+{
+    return strspn(v, "0123456789;") == strlen(v);
+}
+
+static char *dup_n(const char *s, size_t n)
+{
+    char *p = memcpy(xmalloc(n + 1), s, n);
+    p[n] = '\0';
+    return p;
+}
+
+/* LS_COLORS (dircolors format) over defaults. The last matching glob wins.
+ * On Windows "executable" is an extension in pathext (PATHEXT). Strings are
+ * never freed: the process is short lived. */
+static Palette *palette_new(const char *ls_colors, const char *pathext)
+{
+    Palette *p = xmalloc(sizeof *p);
+    const char *s;
+
+    memset(p, 0, sizeof *p);
+    p->di = "01;34";
+    p->ln = "01;36";
+    p->ex = "01;32";
+    p->fi = "";
+    p->da = "2";
+    p->sn = "33";
+    p->dm = "34";
+    for (s = ls_colors ? ls_colors : ""; *s;) {
+        const char *e = strchr(s, ':'), *eq;
+        size_t n = e ? (size_t)(e - s) : strlen(s);
+        char *item = dup_n(s, n), *key, *val;
+        s += n + (e ? 1 : 0);
+        eq = strchr(item, '=');
+        if (!eq || !sgr_valid(eq + 1))
+            continue;
+        key = dup_n(item, (size_t)(eq - item));
+        val = xstrdup(eq + 1);
+        if (key[0] == '*') {
+            p->globs = xrealloc(p->globs,
+                                (size_t)(p->nglobs + 1) * sizeof *p->globs);
+            p->globs[p->nglobs].pat = key;
+            p->globs[p->nglobs++].sgr = val;
+        } else if (!strcmp(key, "di")) {
+            p->di = val;
+        } else if (!strcmp(key, "ln")) {
+            p->ln = val;
+        } else if (!strcmp(key, "ex")) {
+            p->ex = val;
+        } else if (!strcmp(key, "fi")) {
+            p->fi = val;
+        } else if (!strcmp(key, "da")) {
+            p->da = val;
+        } else if (!strcmp(key, "sn")) {
+            p->sn = val;
+        } else if (!strcmp(key, "dm")) {
+            p->dm = val;
+        } /* other keys are ignored */
+    }
+    /* PATHEXT: ";"-separated; unset or empty gives the default list */
+    for (s = pathext ? pathext : ""; *s;) {
+        const char *e = strchr(s, ';');
+        size_t n = e ? (size_t)(e - s) : strlen(s), i;
+        const char *w = s;
+        s += n + (e ? 1 : 0);
+        while (n && (*w == ' ' || *w == '\t')) {
+            w++;
+            n--;
+        }
+        while (n && (w[n - 1] == ' ' || w[n - 1] == '\t'))
+            n--;
+        if (n) {
+            char *x = dup_n(w, n);
+            for (i = 0; i < n; i++)
+                if (x[i] >= 'A' && x[i] <= 'Z')
+                    x[i] = (char)(x[i] + 32);
+            p->exts = xrealloc(p->exts,
+                               (size_t)(p->nexts + 1) * sizeof *p->exts);
+            p->exts[p->nexts++] = x;
+        }
+    }
+    if (!p->nexts) {
+        static const char *dflt[] = {".exe", ".bat", ".cmd", ".com"};
+        int i;
+        p->exts = xmalloc(4 * sizeof *p->exts);
+        for (i = 0; i < 4; i++)
+            p->exts[p->nexts++] = xstrdup(dflt[i]);
+    }
+    return p;
+}
+
+static int ends_with_ic(const char *s, const char *suffix)
+{
+    size_t n = strlen(s), k = strlen(suffix);
+    return n >= k && streq_ic(s + n - k, suffix, 1);
+}
+
+/* SGR parameter string for an Entry ("" for none). */
+static const char *palette_style(const Palette *p, const Entry *e)
+{
+    const char *base = e->name, *s;
+    int exec, i;
+    if (e->is_link)
+        return p->ln;
+    if (e->is_dir)
+        return p->di;
+    for (s = e->name; *s; s++)
+        if (is_sep(*s))
+            base = s + 1;
+    if (IS_WIN) {
+        exec = 0;
+        for (i = 0; i < p->nexts; i++)
+            if (ends_with_ic(base, p->exts[i]))
+                exec = 1;
+    } else {
+        exec = e->is_exec;
+    }
+    if (exec)
+        return p->ex;
+    for (i = p->nglobs - 1; i >= 0; i--)
+        if (wild(p->globs[i].pat, base, IS_WIN))
+            return p->globs[i].sgr;
+    return p->fi;
+}
+
+/* Append text, wrapped in the SGR sequence when there is one. */
+static void paint_into(Buf *b, const char *sgr, const char *text)
+{
+    if (!*sgr) {
+        buf_puts(b, text);
+        return;
+    }
+    buf_puts(b, "\033[");
+    buf_puts(b, sgr);
+    buf_putc(b, 'm');
+    buf_puts(b, text);
+    buf_puts(b, "\033[0m");
+}
+
+/* mode: 0 auto, 1 always, 2 never. vt: Windows console accepted ANSI. */
+static int color_enabled(int mode, int tty, int vt)
+{
+    const char *nc;
+    if (mode == 1)
+        return 1;
+    nc = getenv("NO_COLOR");
+    if (mode == 2 || (nc && *nc) || !tty)
+        return 0;
+    return vt || !IS_WIN || getenv("TERM") || getenv("TERM_PROGRAM")
+           || getenv("WT_SESSION");
+}
+
+#if IS_WIN
+static DWORD g_vt_old;
+static int g_vt_set;
+
+/* Turn on ANSI processing for a real console; 0 if not a console. */
+static int enable_vt(void)
+{
+    HANDLE h = GetStdHandle(STD_OUTPUT_HANDLE);
+    DWORD m;
+    if (g_vt_set)
+        return 1;
+    if (!GetConsoleMode(h, &m))
+        return 0;
+    g_vt_old = m;
+    g_vt_set = SetConsoleMode(h, m | 0x0004) != 0; /* VIRTUAL_TERMINAL_PROCESSING */
+    return g_vt_set;
+}
+
+static void restore_vt(void)
+{
+    if (g_vt_set)
+        SetConsoleMode(GetStdHandle(STD_OUTPUT_HANDLE), g_vt_old);
+}
+#else
+static int enable_vt(void) { return 0; }
+static void restore_vt(void) {}
+#endif
+
 /* ------------------------------------------------------------ rendering */
 
 static void size_text(char *out, const Entry *e, const Args *a)
@@ -1374,7 +1574,8 @@ static void format_entry(Buf *line, const Entry *e, int width, const Args *a)
 {
     Buf name = {0}, q = {0};
     char when[32], size[40];
-    const char *shown;
+    const char *shown, *none = "";
+    const Palette *pal = a->pal;
     int pad;
 
     buf_puts(&name, e->name);
@@ -1392,18 +1593,18 @@ static void format_entry(Buf *line, const Entry *e, int width, const Args *a)
         shown = buf_str(&q);
     }
     if (a->names) {
-        buf_puts(line, shown);
+        paint_into(line, pal ? palette_style(pal, e) : none, shown);
     } else {
         format_time(when, e->sec);
         size_text(size, e, a);
         pad = width - (int)strlen(size);
-        buf_puts(line, when);
+        paint_into(line, pal ? pal->da : none, when);
         buf_puts(line, "  ");
         while (pad-- > 0)
-            buf_putc(line, ' ');
-        buf_puts(line, size);
+            buf_putc(line, ' '); /* padding stays uncolored */
+        paint_into(line, pal ? (e->is_dir ? pal->dm : pal->sn) : none, size);
         buf_putc(line, ' ');
-        buf_puts(line, shown);
+        paint_into(line, pal ? palette_style(pal, e) : none, shown);
         if (e->target) {
             buf_puts(line, " -> ");
             buf_puts(line, e->target);
@@ -1465,6 +1666,84 @@ static int stdout_is_tty(void)
 #endif
 }
 
+/* ------------------------------------------------------------ L_OPTS */
+
+/* shlex.split (POSIX mode): whitespace separated, '..' literal, ".." with
+ * \" and \\ escapes, backslash escapes outside quotes. */
+static char **shlex_split(const char *s, int *count)
+{
+    char **v = NULL;
+    int n = 0, in_tok = 0;
+    char quote = 0;
+    Buf cur = {0};
+
+    for (; *s; s++) {
+        char c = *s;
+        if (quote == '\'') {
+            if (c == '\'')
+                quote = 0;
+            else
+                buf_putc(&cur, c);
+        } else if (quote == '"') {
+            if (c == '"')
+                quote = 0;
+            else if (c == '\\' && (s[1] == '"' || s[1] == '\\'))
+                buf_putc(&cur, *++s);
+            else
+                buf_putc(&cur, c);
+        } else if (c == ' ' || c == '\t' || c == '\n' || c == '\r') {
+            if (in_tok) {
+                v = xrealloc(v, (size_t)(n + 1) * sizeof *v);
+                v[n++] = xstrdup(buf_str(&cur));
+                buf_free(&cur);
+                in_tok = 0;
+            }
+        } else if (c == '\'' || c == '"') {
+            quote = c;
+            in_tok = 1;
+        } else if (c == '\\') {
+            if (!s[1])
+                die("L_OPTS: no escaped character");
+            buf_putc(&cur, *++s);
+            in_tok = 1;
+        } else {
+            buf_putc(&cur, c);
+            in_tok = 1;
+        }
+    }
+    if (quote)
+        die("L_OPTS: no closing quotation");
+    if (in_tok) {
+        v = xrealloc(v, (size_t)(n + 1) * sizeof *v);
+        v[n++] = xstrdup(buf_str(&cur));
+    }
+    buf_free(&cur);
+    *count = n;
+    return v;
+}
+
+/* argv with the L_OPTS words inserted after argv[0] (command line wins). */
+static char **with_l_opts(int *argc, char **argv)
+{
+    const char *env = getenv("L_OPTS");
+    char **opts, **nv;
+    int n, i;
+    if (!env)
+        return argv;
+    opts = shlex_split(env, &n);
+    if (!n)
+        return argv;
+    nv = xmalloc((size_t)(*argc + n + 1) * sizeof *nv);
+    nv[0] = argv[0];
+    for (i = 0; i < n; i++)
+        nv[1 + i] = opts[i];
+    for (i = 1; i < *argc; i++)
+        nv[n + i] = argv[i];
+    *argc += n;
+    nv[*argc] = NULL;
+    return nv;
+}
+
 /* ------------------------------------------------------------ main */
 
 static char **utf8_argv(int *argc)
@@ -1510,6 +1789,7 @@ int main(int argc, char **argv)
     uv = utf8_argv(&argc);
     (void)uv;
 #endif
+    argv = with_l_opts(&argc, argv);
     parse_args(&a, argc, argv);
     if (a.by_dir)
         a.recursive = 1;
@@ -1520,6 +1800,12 @@ int main(int argc, char **argv)
     }
     multi = a.ntargets > 1;
     tty = stdout_is_tty();
+    if (color_enabled(a.color, tty,
+                      IS_WIN && tty && a.color != 2 && enable_vt())) {
+        a.pal = palette_new(getenv("LS_COLORS"), getenv("PATHEXT"));
+        if (a.color == 1 && tty)
+            enable_vt(); /* --color=always on a real console */
+    }
     show_summary = a.summary || (tty && !a.names);
 
     for (i = 0; i < a.ntargets; i++) {
@@ -1601,5 +1887,6 @@ int main(int argc, char **argv)
                  g_errors == 1 ? "" : "s");
         err_line(m);
     }
+    restore_vt();
     return g_code;
 }

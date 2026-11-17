@@ -127,8 +127,9 @@ make test            # runs test_l.py against the C build (L_BIN=...)
 
 Same options and output as `l.py` for: targets, sorting, `-R`, `--by-dir`,
 `-h`, `--commas`, hidden and skip list, `--names`, `--posix`, `--quote`,
-links, footer, errors and exit codes. Not in the C build yet: color
-(`--color` is accepted and ignored), `L_OPTS`. Differences: output is always
+links, footer, color (`LS_COLORS`, `PATHEXT`; no `colorama` needed, a Windows
+console is switched to ANSI mode directly), `L_OPTS`, errors and exit codes.
+Differences: output is always
 UTF-8 (`--utf8` is accepted and does nothing); `-i` and the Windows case
 rule fold ASCII letters only; whole-second mtime ordering except on Linux.
 
