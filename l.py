@@ -227,7 +227,7 @@ def summary_line(files, dirs, nbytes, free, human):
 
 # da/sn follow eza's keys (date, size number); dm (dir marker) is ours.
 DEFAULT_COLORS = {'di': '01;34', 'ln': '01;36', 'ex': '01;32',
-                  'da': '2', 'sn': '33', 'dm': '34'}
+                  'da': '90','sn': '33', 'dm': '34'}
 LS_COLOR_TYPES = ('di', 'ln', 'ex', 'fi', 'da', 'sn', 'dm')  # others ignored
 SGR_CHARS = '0123456789;'  # LS_COLORS values: SGR parameters only
 WIN_EXECUTABLE = ('.exe', '.bat', '.cmd', '.com')

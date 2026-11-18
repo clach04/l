@@ -136,7 +136,7 @@ class ColorTests(unittest.TestCase):
         self.assertEqual(p.style(self.E('d', is_dir=True)), '01;34')
         self.assertEqual(p.style(self.E('l', is_link=True)), '01;36')
         self.assertEqual(p.style(self.E('f')), '')
-        self.assertEqual(p.paint_key('da', 'x'), '\x1b[2mx\x1b[0m')
+        self.assertEqual(p.paint_key('da', 'x'), '\x1b[90mx\x1b[0m')
         self.assertEqual(p.paint_key('sn', 'x'), '\x1b[33mx\x1b[0m')
         self.assertEqual(p.paint_key('dm', 'x'), '\x1b[34mx\x1b[0m')
         self.assertEqual(l.Palette('sn=').paint_key('sn', 'x'), 'x')
@@ -544,7 +544,7 @@ class CliTests(unittest.TestCase):
         # padding is outside the color so columns line up
         self.assertIn(' \x1b[0;32m1\x1b[0m', out)
         code, out, err = run(['--color=always', 'new.py'], cwd=self.d)
-        self.assertTrue(out.startswith('\x1b[2m'), repr(out))  # default dim
+        self.assertTrue(out.startswith('\x1b[90m'), repr(out))  # default grey
         self.assertIn('\x1b[33m1\x1b[0m', out)  # default yellow size
 
     def test_bad_flag(self):

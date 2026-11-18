@@ -1405,7 +1405,7 @@ static Palette *palette_new(const char *ls_colors, const char *pathext)
     p->ln = "01;36";
     p->ex = "01;32";
     p->fi = "";
-    p->da = "2";
+    p->da = "90"; /* grey; SGR 2 (faint) is ignored by Windows 10 conhost */
     p->sn = "33";
     p->dm = "34";
     for (s = ls_colors ? ls_colors : ""; *s;) {
